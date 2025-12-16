@@ -348,15 +348,15 @@ motivation
 
 기본 페르소나(예시):
 
-Critic(비판/한계)
+Optimist(강점/의의)
 
-ReproPolice(재현성)
+Critics(비판/한계)
 
 Theory(가정/정당화)
 
-Experiments(실험/베이스라인)
+Experimenter(실험/베이스라인)
 
-RelatedWork(관련연구/추천) 
+Literature Scout(관련연구/추천/다음 읽을거리, 필요시 web search) 
 
 main
 
@@ -432,13 +432,10 @@ main
   },
   "personas": [
     {
-      "id":"critic",
-      "title":"Critic",
+      "id":"optimist",
+      "title":"Optimist",
       "highlights":[
         {"point":"string","severity":"low|med|high","evidence":[{"page":7,"quote":"string","why":"string"}]}
-      ],
-      "questions_to_ask":[
-        {"q":"string","evidence":[{"page":7,"quote":"string","why":"string"}]}
       ]
     }
   ],

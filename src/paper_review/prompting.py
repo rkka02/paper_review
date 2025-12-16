@@ -2,14 +2,14 @@ from __future__ import annotations
 
 PERSONAS = [
     {
-        "id": "critic",
-        "title": "Critic",
-        "focus": "Key weaknesses, unstated assumptions, and where claims may be overreaching.",
+        "id": "optimist",
+        "title": "Optimist",
+        "focus": "Key strengths, novelty, what works well, and why it matters.",
     },
     {
-        "id": "repro_police",
-        "title": "ReproPolice",
-        "focus": "Reproducibility: code/data availability, missing details, hyperparameters, compute.",
+        "id": "critics",
+        "title": "Critics",
+        "focus": "Key weaknesses, unstated assumptions, and where claims may be overreaching.",
     },
     {
         "id": "theory",
@@ -17,14 +17,14 @@ PERSONAS = [
         "focus": "Theoretical grounding, assumptions/justification, and whether the method is principled.",
     },
     {
-        "id": "experiments",
-        "title": "Experiments",
+        "id": "experimenter",
+        "title": "Experimenter",
         "focus": "Experimental design, baselines, ablations, metrics, and whether results support claims.",
     },
     {
-        "id": "related_work",
-        "title": "RelatedWork",
-        "focus": "Closest related work to compare against and what to read next.",
+        "id": "literature_scout",
+        "title": "Literature Scout",
+        "focus": "Closest related work to compare against and what to read next (use web search if available).",
     },
 ]
 
@@ -60,7 +60,7 @@ You MUST produce a single JSON object that matches the provided JSON Schema exac
 Do not output Markdown. Do not add keys that are not in the schema.
 
 Evidence rules (strict):
-- For every non-trivial claim, contribution, limitation, and persona point/question: include evidence objects.
+- For every non-trivial claim, contribution, limitation, and persona highlight: include evidence objects.
 - Each evidence object must include: page number, a short direct quote (<=200 chars), and why that quote supports the point.
 - If you cannot find evidence, leave the evidence array empty and record the uncertainty in diagnostics.unknowns (no guessing).
 {no_pdf_rules}
@@ -69,7 +69,7 @@ Output size limits (keep it concise):
 - section_map: <= 12 items (1–2 sentence summaries)
 - figures/tables: <= 10 each (only the most important)
 - contributions/claims/limitations: <= 5 each (prioritize the most central)
-- per persona: highlights <= 5, questions_to_ask <= 5
+- per persona: highlights <= 6
 - final_synthesis: strengths <= 6, weaknesses <= 6, who_should_read <= 5
 
 Context (best-effort, may be incomplete):

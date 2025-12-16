@@ -72,8 +72,6 @@ def _extract_evidence_rows(canonical: dict) -> list[dict]:
     for persona in (canonical.get("personas") or []):
         for h in (persona or {}).get("highlights") or []:
             add_evidence((h or {}).get("evidence"), "persona")
-        for q in (persona or {}).get("questions_to_ask") or []:
-            add_evidence((q or {}).get("evidence"), "persona")
 
     final = canonical.get("final_synthesis") or {}
     add_evidence(final.get("evidence"), "persona")

@@ -111,21 +111,12 @@ class PersonaHighlight(BaseModel):
     severity: Literal["low", "med", "high"]
     evidence: list[Evidence]
 
-
-class PersonaQuestion(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    q: str
-    evidence: list[Evidence]
-
-
 class PersonaBlock(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
     title: str
     highlights: list[PersonaHighlight]
-    questions_to_ask: list[PersonaQuestion]
 
 
 class SuggestedRating(BaseModel):
@@ -336,7 +327,7 @@ OPENAI_JSON_SCHEMA: dict = {
                 "items": {
                     "type": "object",
                     "additionalProperties": False,
-                    "required": ["id", "title", "highlights", "questions_to_ask"],
+                    "required": ["id", "title", "highlights"],
                     "properties": {
                         "id": {"type": "string"},
                         "title": {"type": "string"},
@@ -350,21 +341,6 @@ OPENAI_JSON_SCHEMA: dict = {
                                     "point": {"type": "string"},
                                     "severity": {"type": "string", "enum": ["low", "med", "high"]},
                                     "evidence": {"type": "array", "items": EVIDENCE_JSON_SCHEMA},
-                                },
-                            },
-                        },
-                        "questions_to_ask": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "additionalProperties": False,
-                                "required": ["q", "evidence"],
-                                "properties": {
-                                    "q": {"type": "string"},
-                                    "evidence": {
-                                        "type": "array",
-                                        "items": EVIDENCE_JSON_SCHEMA,
-                                    },
                                 },
                             },
                         },

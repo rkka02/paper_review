@@ -351,6 +351,26 @@ input[type="file"] {
   overflow-wrap: anywhere;
 }
 
+.author-list {
+  display: grid;
+  gap: 4px;
+}
+
+.author-line {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.author-name {
+  font-weight: 700;
+}
+
+.author-aff {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .section {
   margin-top: 12px;
   display: grid;

@@ -20,7 +20,7 @@
 - Evidence 규칙(엄격):
   - 아래 항목들은 **각각 evidence 배열**로 근거를 제공합니다.
     - `normalized.contributions[]`, `normalized.claims[]`, `normalized.limitations[]`
-    - `personas[].highlights[]`, `personas[].questions_to_ask[]`
+    - `personas[].highlights[]`
     - `final_synthesis.evidence`
     - `normalized.reproducibility.evidence`
   - Evidence는 `{ "page": ..., "quote": "...", "why": "..." }`
@@ -33,7 +33,7 @@
 - `normalized.section_map`: 최대 12개 (각 summary는 1~2문장)
 - `normalized.figures` / `normalized.tables`: 각각 최대 10개 (중요한 것만)
 - `normalized.contributions` / `normalized.claims` / `normalized.limitations`: 각각 최대 5개 (핵심만)
-- 각 persona: `highlights` 최대 5, `questions_to_ask` 최대 5
+- 각 persona: `highlights` 최대 6
 - `final_synthesis.strengths` / `weaknesses`: 각각 최대 6
 - `final_synthesis.who_should_read`: 최대 5
 
@@ -49,12 +49,11 @@ PDF 없이 DOI/메타데이터만 보고 작성하는 경우:
 ## Personas (고정)
 
 아래 5개 persona를 **반드시 포함**합니다(각각 `id`, `title` 동일).
-
-- `critic` / `Critic`: Key weaknesses, unstated assumptions, and where claims may be overreaching.
-- `repro_police` / `ReproPolice`: Reproducibility: code/data availability, missing details, hyperparameters, compute.
+- `optimist` / `Optimist`: Key strengths, novelty, what works well, and why it matters.
+- `critics` / `Critics`: Key weaknesses, unstated assumptions, and where claims may be overreaching.
 - `theory` / `Theory`: Theoretical grounding, assumptions/justification, and whether the method is principled.
-- `experiments` / `Experiments`: Experimental design, baselines, ablations, metrics, and whether results support claims.
-- `related_work` / `RelatedWork`: Closest related work to compare against and what to read next.
+- `experimenter` / `Experimenter`: Experimental design, baselines, ablations, metrics, and whether results support claims.
+- `literature_scout` / `Literature Scout`: Closest related work to compare against and what to read next (use web search if available).
 
 ## Context 템플릿 (선택)
 
@@ -144,11 +143,9 @@ abstract:
   - `notes`: string
   - `evidence`: `[Evidence]`
 - `personas[]` item:
-  - `{ "id": "string", "title": "string", "highlights": [...], "questions_to_ask": [...] }`
+  - `{ "id": "string", "title": "string", "highlights": [...] }`
   - `highlights[]` item:
     - `{ "point": "string", "severity": "low|med|high", "evidence": [Evidence] }`
-  - `questions_to_ask[]` item:
-    - `{ "q": "string", "evidence": [Evidence] }`
 - `final_synthesis`:
   - `suggested_rating.overall`: int (0~5)
   - `suggested_rating.confidence`: float (0.0~1.0)
@@ -158,4 +155,3 @@ abstract:
 - JSON 파싱이 되는지(중괄호/쉼표/따옴표) 확인
 - `personas` 5개 모두 존재하는지 확인(`id`/`title` 정확히)
 - evidence `quote` 길이(<=200)와 `page`(>=1) 확인
-

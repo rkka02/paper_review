@@ -191,6 +191,29 @@ function renderBullets(items) {
   return ul;
 }
 
+function renderAuthors(authors) {
+  const items = asArray(authors)
+    .map((a) => {
+      if (!a || typeof a !== "object") return null;
+      const name = String(a.name || "").trim();
+      const affiliation = String(a.affiliation || "").trim();
+      if (!name) return null;
+      return { name, affiliation: affiliation || null };
+    })
+    .filter(Boolean);
+
+  if (!items.length) return createEl("span", { className: "muted", text: "-" });
+
+  const wrap = createEl("div", { className: "author-list" });
+  for (const it of items) {
+    const line = createEl("div", { className: "author-line" });
+    line.appendChild(createEl("span", { className: "author-name", text: it.name }));
+    if (it.affiliation) line.appendChild(createEl("span", { className: "author-aff", text: it.affiliation }));
+    wrap.appendChild(line);
+  }
+  return wrap;
+}
+
 function switchDetailTab(tab) {
   selectedDetailTab = tab;
   const views = {
@@ -234,17 +257,7 @@ function renderOverview(canonical) {
   overviewView.appendChild(createEl("div", { className: "overview-title", text: title }));
 
   const kv = createEl("div", { className: "kv" });
-  const authors = asArray(meta.authors)
-    .map((a) => {
-      const name = (a && a.name) || "";
-      const aff = (a && a.affiliation) || "";
-      if (!name) return null;
-      return aff ? `${name} (${aff})` : name;
-    })
-    .filter(Boolean)
-    .join(", ");
-
-  kv.appendChild(kvRow("Authors", authors || "-"));
+  kv.appendChild(kvRow("Authors", renderAuthors(meta.authors)));
   kv.appendChild(kvRow("Year", meta.year ? String(meta.year) : "-"));
   kv.appendChild(kvRow("Venue", meta.venue || "-"));
   kv.appendChild(kvRow("DOI", doiLink(meta.doi || "")));
@@ -347,24 +360,6 @@ function renderPersonas(canonical) {
     }
   }
   personaContent.appendChild(hl);
-
-  const questions = asArray(persona.questions_to_ask);
-  const qs = createEl("div", { className: "section" });
-  qs.appendChild(
-    createEl("div", { className: "section-subtitle", text: `Questions to ask (${questions.length})` }),
-  );
-  if (!questions.length) {
-    qs.appendChild(createEl("div", { className: "muted", text: "No questions." }));
-  } else {
-    for (const q of questions) {
-      const item = createEl("div", { className: "item" });
-      item.appendChild(createEl("div", { className: "item-text", text: q.q || "" }));
-      const ev = renderEvidenceBlock(q.evidence);
-      if (ev) item.appendChild(ev);
-      qs.appendChild(item);
-    }
-  }
-  personaContent.appendChild(qs);
 }
 
 function renderNormalized(canonical) {
