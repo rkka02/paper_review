@@ -4,6 +4,8 @@ const $ = (id) => document.getElementById(id);
 const loginSection = $("loginSection");
 const appSection = $("appSection");
 const logoutBtn = $("logoutBtn");
+const themeToggle = $("themeToggle");
+const toastHost = $("toastHost");
 
 const usernameInput = $("username");
 const passwordInput = $("password");
@@ -15,16 +17,23 @@ const driveFileIdInput = $("driveFileId");
 const doiInput = $("doi");
 const titleInput = $("title");
 const analysisJsonFileInput = $("analysisJsonFile");
+const analysisJsonText = $("analysisJsonText");
+const analysisJsonClearBtn = $("analysisJsonClearBtn");
 const createBtn = $("createBtn");
 const createStatus = $("createStatus");
 
 const refreshBtn = $("refreshBtn");
+const paperSearch = $("paperSearch");
+const paperCount = $("paperCount");
 const papersList = $("papersList");
 
 const analyzeBtn = $("analyzeBtn");
 const importJsonBtn = $("importJsonBtn");
 const importJsonFileInput = $("importJsonFile");
 const importJsonStatus = $("importJsonStatus");
+const importJsonText = $("importJsonText");
+const importJsonTextBtn = $("importJsonTextBtn");
+const importJsonClearBtn = $("importJsonClearBtn");
 const stopPollBtn = $("stopPollBtn");
 const detailMeta = $("detailMeta");
 const detailError = $("detailError");
@@ -42,6 +51,7 @@ const jsonView = $("jsonView");
 let selectedPaperId = null;
 let pollHandle = null;
 let authEnabled = false;
+let paperSummaries = [];
 let selectedDetailTab = "overview";
 let selectedPersonaId = null;
 let selectedNormalizedTab = "section_map";
@@ -57,6 +67,32 @@ function hide(el) {
 
 function setText(el, text) {
   el.textContent = text ?? "";
+}
+
+function currentTheme() {
+  return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+}
+
+function setTheme(theme) {
+  const next = theme === "dark" ? "dark" : "light";
+  if (next === "dark") document.documentElement.setAttribute("data-theme", "dark");
+  else document.documentElement.removeAttribute("data-theme");
+  try {
+    localStorage.setItem("theme", next);
+  } catch {
+    // ignore
+  }
+  if (themeToggle) themeToggle.textContent = next === "dark" ? "Light" : "Dark";
+}
+
+function initTheme() {
+  let saved = null;
+  try {
+    saved = localStorage.getItem("theme");
+  } catch {
+    saved = null;
+  }
+  setTheme(saved === "dark" ? "dark" : "light");
 }
 
 async function api(path, opts = {}) {
@@ -93,6 +129,42 @@ async function api(path, opts = {}) {
   return res.text();
 }
 
+function parseJsonLoose(rawText) {
+  const raw = String(rawText || "").trim();
+  if (!raw) throw new Error("Empty JSON.");
+
+  const tryParse = (text) => JSON.parse(text);
+
+  try {
+    return tryParse(raw);
+  } catch {
+    // continue
+  }
+
+  let text = raw;
+  if (text.startsWith("```")) {
+    const lines = text.split(/\r?\n/);
+    if (lines.length >= 1 && lines[0].trim().startsWith("```")) lines.shift();
+    if (lines.length >= 1 && lines[lines.length - 1].trim().startsWith("```")) lines.pop();
+    text = lines.join("\n").trim();
+  }
+
+  try {
+    return tryParse(text);
+  } catch {
+    // continue
+  }
+
+  const firstBrace = text.indexOf("{");
+  const lastBrace = text.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    const sliced = text.slice(firstBrace, lastBrace + 1).trim();
+    return tryParse(sliced);
+  }
+
+  return tryParse(text);
+}
+
 function normalizeTitle(p) {
   const t = p.paper?.title || p.paper?.doi || p.paper?.drive_file_id || p.paper?.id;
   return t || "(untitled)";
@@ -101,6 +173,14 @@ function normalizeTitle(p) {
 function runBadgeText(run) {
   if (!run) return "run: -";
   return `run: ${run.status}`;
+}
+
+function runBadgeClass(run) {
+  const status = run?.status || "";
+  if (status === "succeeded") return "badge-ok";
+  if (status === "failed") return "badge-bad";
+  if (status === "queued" || status === "running") return "badge-warn";
+  return "";
 }
 
 function asArray(value) {
@@ -118,6 +198,24 @@ function createEl(tag, opts = {}) {
     }
   }
   return node;
+}
+
+function toast(message, type = "info", timeoutMs = 3500) {
+  const msg = String(message || "").trim();
+  if (!msg) return;
+  if (!toastHost) {
+    if (type === "error") alert(msg);
+    else console.log(msg);
+    return;
+  }
+
+  const el = createEl("div", { className: `toast toast-${type}`, text: msg });
+  toastHost.appendChild(el);
+  requestAnimationFrame(() => el.classList.add("show"));
+  window.setTimeout(() => {
+    el.classList.remove("show");
+    window.setTimeout(() => el.remove(), 220);
+  }, timeoutMs);
 }
 
 function pill(text, variant) {
@@ -533,7 +631,7 @@ async function renamePaper(paper) {
   if (value === null) return;
   const next = value.trim();
   if (!next) {
-    alert("Title cannot be empty.");
+    toast("Title cannot be empty.", "error", 5000);
     return;
   }
   await api(`/api/papers/${paper.id}`, {
@@ -541,6 +639,7 @@ async function renamePaper(paper) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title: next }),
   });
+  toast("Renamed.", "success");
   await refreshPapers();
   if (selectedPaperId === paper.id) await loadDetails(selectedPaperId);
 }
@@ -551,6 +650,7 @@ async function deletePaper(paper) {
   if (!ok) return;
   stopPolling();
   await api(`/api/papers/${paper.id}`, { method: "DELETE" });
+  toast("Deleted.", "success");
   if (selectedPaperId === paper.id) selectedPaperId = null;
   await refreshPapers();
   await loadDetails(selectedPaperId);
@@ -561,7 +661,8 @@ function renderPapers(items) {
   if (!items.length) {
     const empty = document.createElement("div");
     empty.className = "muted";
-    empty.textContent = "No papers yet.";
+    const q = (paperSearch && paperSearch.value ? paperSearch.value : "").trim();
+    empty.textContent = q ? "No matches." : "No papers yet.";
     papersList.appendChild(empty);
     return;
   }
@@ -581,7 +682,7 @@ function renderPapers(items) {
     meta.textContent = `${item.paper.id}  •  doi: ${item.paper.doi || "-"}  •  status: ${item.paper.status}`;
 
     const badge = document.createElement("div");
-    badge.className = "badge";
+    badge.className = ["badge", runBadgeClass(item.latest_run)].filter(Boolean).join(" ");
     badge.textContent = runBadgeText(item.latest_run);
 
     const actions = document.createElement("div");
@@ -616,7 +717,7 @@ function renderPapers(items) {
 
     div.addEventListener("click", async () => {
       selectedPaperId = item.paper.id;
-      await refreshPapers();
+      applyPapersFilter();
       await loadDetails(selectedPaperId);
     });
 
@@ -684,9 +785,28 @@ async function logout() {
   await refreshSession();
 }
 
+function applyPapersFilter() {
+  const q = (paperSearch && paperSearch.value ? paperSearch.value : "").trim().toLowerCase();
+  const filtered = !q
+    ? paperSummaries
+    : paperSummaries.filter((item) => {
+        const p = item.paper || {};
+        const title = normalizeTitle(item);
+        const hay = `${title} ${p.doi || ""} ${p.drive_file_id || ""} ${p.id || ""}`.toLowerCase();
+        return hay.includes(q);
+      });
+
+  if (paperCount) {
+    const text = q ? `${filtered.length} / ${paperSummaries.length}` : `${paperSummaries.length}`;
+    paperCount.textContent = `${text} papers`;
+  }
+  renderPapers(filtered);
+}
+
 async function refreshPapers() {
   const items = await api("/api/papers/summary");
-  renderPapers(items);
+  paperSummaries = items;
+  applyPapersFilter();
 }
 
 function clearStructuredViews() {
@@ -706,6 +826,14 @@ function applyDetailPayload(d, paperId) {
   setText(detailMeta, `${head}paper_id=${paperId}  •  run=${runStatus}`);
   setText(detailError, run?.error || "");
   setText(mdView, d.latest_content_md || "");
+
+  const busy = runStatus === "queued" || runStatus === "running";
+  if (selectedPaperId === paperId) {
+    analyzeBtn.textContent = busy ? "Analyzing..." : "Analyze";
+    analyzeBtn.disabled = busy;
+    importJsonBtn.disabled = busy;
+    if (importJsonTextBtn) importJsonTextBtn.disabled = busy;
+  }
 
   const outKey = d.latest_output ? JSON.stringify(d.latest_output) : "";
   if (outKey !== lastDetailOutputKey) {
@@ -729,10 +857,12 @@ async function loadDetails(paperId) {
   clearStructuredViews();
   analyzeBtn.disabled = !paperId;
   importJsonBtn.disabled = !paperId;
+  if (importJsonTextBtn) importJsonTextBtn.disabled = !paperId;
   lastDetailOutputKey = null;
 
   if (!paperId) {
     setText(detailMeta, "");
+    analyzeBtn.textContent = "Analyze";
     switchDetailTab("overview");
     return;
   }
@@ -759,7 +889,10 @@ async function startPolling(paperId) {
 async function enqueueAnalyze() {
   if (!selectedPaperId) return;
   setText(detailError, "");
+  analyzeBtn.disabled = true;
+  analyzeBtn.textContent = "Analyzing...";
   await api(`/api/papers/${selectedPaperId}/analyze`, { method: "POST" });
+  toast("Queued analysis.", "info");
   await loadDetails(selectedPaperId);
   await startPolling(selectedPaperId);
 }
@@ -772,13 +905,7 @@ async function importJsonToSelectedPaper() {
 
   setText(importJsonStatus, "Working...");
   try {
-    let parsed = null;
-    try {
-      const text = await file.text();
-      parsed = JSON.parse(text);
-    } catch (e) {
-      throw new Error(`Invalid JSON file: ${String(e.message || e)}`);
-    }
+    const parsed = parseJsonLoose(await file.text());
 
     await api(`/api/papers/${selectedPaperId}/import-json`, {
       method: "POST",
@@ -787,13 +914,44 @@ async function importJsonToSelectedPaper() {
     });
     importJsonFileInput.value = "";
     setText(importJsonStatus, "Imported.");
+    toast("Imported.", "success");
     await refreshPapers();
     await loadDetails(selectedPaperId);
     switchDetailTab("overview");
   } catch (e) {
     const msg = String(e.message || e);
-    alert(msg);
     setText(importJsonStatus, `Error: ${msg}`);
+    toast(msg, "error", 6500);
+  } finally {
+    setTimeout(() => setText(importJsonStatus, ""), 4000);
+  }
+}
+
+async function importJsonTextToSelectedPaper() {
+  if (!selectedPaperId) return;
+  const raw = (importJsonText && importJsonText.value ? importJsonText.value : "").trim();
+  if (!raw) {
+    toast("Paste analysis JSON first.", "error", 5000);
+    return;
+  }
+
+  setText(importJsonStatus, "Working...");
+  try {
+    const parsed = parseJsonLoose(raw);
+    await api(`/api/papers/${selectedPaperId}/import-json`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(parsed),
+    });
+    setText(importJsonStatus, "Imported.");
+    toast("Imported.", "success");
+    await refreshPapers();
+    await loadDetails(selectedPaperId);
+    switchDetailTab("overview");
+  } catch (e) {
+    const msg = String(e.message || e);
+    setText(importJsonStatus, `Error: ${msg}`);
+    toast(msg, "error", 6500);
   } finally {
     setTimeout(() => setText(importJsonStatus, ""), 4000);
   }
@@ -802,23 +960,38 @@ async function importJsonToSelectedPaper() {
 async function createPaper() {
   createBtn.disabled = true;
   setText(createStatus, "Working...");
-  const jsonFile = analysisJsonFileInput.files && analysisJsonFileInput.files[0] ? analysisJsonFileInput.files[0] : null;
-  const usedJsonImport = !!jsonFile;
+  const jsonText = (analysisJsonText && analysisJsonText.value ? analysisJsonText.value : "").trim();
+  const jsonFile =
+    analysisJsonFileInput.files && analysisJsonFileInput.files[0] ? analysisJsonFileInput.files[0] : null;
   try {
     const doi = doiInput.value.trim() || null;
     const title = titleInput.value.trim() || null;
     const driveFileId = driveFileIdInput.value.trim() || null;
     const file = pdfFileInput.files && pdfFileInput.files[0] ? pdfFileInput.files[0] : null;
 
+    if (!jsonText && !jsonFile && !file && !driveFileId && !doi) {
+      toast("Provide PDF, Drive file id, DOI, or analysis JSON.", "error", 5000);
+      setText(createStatus, "Error: missing input");
+      return;
+    }
+
     let paper = null;
-    if (jsonFile) {
-      let parsed = null;
-      try {
-        const text = await jsonFile.text();
-        parsed = JSON.parse(text);
-      } catch (e) {
-        throw new Error(`Invalid JSON file: ${String(e.message || e)}`);
-      }
+    if (jsonText) {
+      const parsed = parseJsonLoose(jsonText);
+      paper = await api(
+        `/api/papers/import-json?${new URLSearchParams({
+          drive_file_id: driveFileId || "",
+          doi: doi || "",
+          title: title || "",
+        }).toString()}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(parsed),
+        },
+      );
+    } else if (jsonFile) {
+      const parsed = parseJsonLoose(await jsonFile.text());
       paper = await api(
         `/api/papers/import-json?${new URLSearchParams({
           drive_file_id: driveFileId || "",
@@ -854,13 +1027,15 @@ async function createPaper() {
     doiInput.value = "";
     titleInput.value = "";
     analysisJsonFileInput.value = "";
+    if (analysisJsonText) analysisJsonText.value = "";
     setText(createStatus, "OK");
+    toast("Created.", "success");
     await refreshPapers();
     await loadDetails(selectedPaperId);
   } catch (e) {
     const msg = String(e.message || e);
-    if (usedJsonImport) alert(msg);
     setText(createStatus, `Error: ${msg}`);
+    toast(msg, "error", 6500);
   } finally {
     createBtn.disabled = false;
     setTimeout(() => setText(createStatus, ""), 3000);
@@ -868,7 +1043,14 @@ async function createPaper() {
 }
 
 async function main() {
+  initTheme();
   initDetailTabs();
+  if (themeToggle) {
+    themeToggle.addEventListener("click", () => {
+      setTheme(currentTheme() === "dark" ? "light" : "dark");
+    });
+  }
+
   loginBtn.addEventListener("click", login);
   usernameInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") login();
@@ -878,11 +1060,19 @@ async function main() {
   });
   logoutBtn.addEventListener("click", logout);
 
+  if (analysisJsonClearBtn) {
+    analysisJsonClearBtn.addEventListener("click", () => {
+      if (analysisJsonText) analysisJsonText.value = "";
+      toast("Cleared.", "info");
+    });
+  }
+
   createBtn.addEventListener("click", createPaper);
   refreshBtn.addEventListener("click", async () => {
     await refreshPapers();
     if (selectedPaperId) await loadDetails(selectedPaperId);
   });
+  if (paperSearch) paperSearch.addEventListener("input", applyPapersFilter);
   analyzeBtn.addEventListener("click", enqueueAnalyze);
   importJsonBtn.addEventListener("click", () => {
     if (!selectedPaperId) return;
@@ -890,10 +1080,17 @@ async function main() {
     importJsonFileInput.click();
   });
   importJsonFileInput.addEventListener("change", importJsonToSelectedPaper);
+  if (importJsonTextBtn) importJsonTextBtn.addEventListener("click", importJsonTextToSelectedPaper);
+  if (importJsonClearBtn) {
+    importJsonClearBtn.addEventListener("click", () => {
+      if (importJsonText) importJsonText.value = "";
+      toast("Cleared.", "info");
+    });
+  }
   stopPollBtn.addEventListener("click", stopPolling);
 
   await refreshSession();
-  if (!authEnabled || !loginSection.classList.contains("hidden")) return;
+  if (authEnabled && !loginSection.classList.contains("hidden")) return;
   await refreshPapers();
 }
 

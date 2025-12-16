@@ -1,387 +1,478 @@
 {
 "paper": {
 "metadata": {
-"title": "Controlling Electromagnetic Fields",
+"title": "Holographic three-dimensional telepresence using large-area photorefractive polymer",
 "authors": [
 {
-"name": "J. B. Pendry",
-"affiliation": "Department of Physics, Blackett Laboratory, Imperial College London, London SW7 2AZ, UK."
+"name": "P.-A. Blanche",
+"affiliation": "College of Optical Sciences, The University of Arizona, Tucson, Arizona 85721, USA."
 },
 {
-"name": "D. Schurig",
-"affiliation": "Department of Electrical and Computer Engineering, Duke University, Box 90291, Durham, NC 27708, USA."
+"name": "A. Bablumian",
+"affiliation": "College of Optical Sciences, The University of Arizona, Tucson, Arizona 85721, USA."
 },
 {
-"name": "D. R. Smith",
-"affiliation": "Department of Electrical and Computer Engineering, Duke University, Box 90291, Durham, NC 27708, USA."
+"name": "R. Voorakaranam",
+"affiliation": "College of Optical Sciences, The University of Arizona, Tucson, Arizona 85721, USA."
+},
+{
+"name": "C. Christenson",
+"affiliation": "College of Optical Sciences, The University of Arizona, Tucson, Arizona 85721, USA."
+},
+{
+"name": "W. Lin",
+"affiliation": "Nitto Denko Technical Corporation, Oceanside, California 92054, USA."
+},
+{
+"name": "T. Gu",
+"affiliation": "Nitto Denko Technical Corporation, Oceanside, California 92054, USA."
+},
+{
+"name": "D. Flores",
+"affiliation": "Nitto Denko Technical Corporation, Oceanside, California 92054, USA."
+},
+{
+"name": "P. Wang",
+"affiliation": "Nitto Denko Technical Corporation, Oceanside, California 92054, USA."
+},
+{
+"name": "W.-Y. Hsieh",
+"affiliation": "Nitto Denko Technical Corporation, Oceanside, California 92054, USA."
+},
+{
+"name": "M. Kathaperumal",
+"affiliation": "Nitto Denko Technical Corporation, Oceanside, California 92054, USA."
+},
+{
+"name": "B. Rachwal",
+"affiliation": "Nitto Denko Technical Corporation, Oceanside, California 92054, USA."
+},
+{
+"name": "O. Siddiqui",
+"affiliation": "Nitto Denko Technical Corporation, Oceanside, California 92054, USA."
+},
+{
+"name": "J. Thomas",
+"affiliation": "College of Optical Sciences, The University of Arizona, Tucson, Arizona 85721, USA."
+},
+{
+"name": "R. A. Norwood",
+"affiliation": "College of Optical Sciences, The University of Arizona, Tucson, Arizona 85721, USA."
+},
+{
+"name": "M. Yamamoto",
+"affiliation": "Nitto Denko Technical Corporation, Oceanside, California 92054, USA."
+},
+{
+"name": "N. Peyghambarian",
+"affiliation": "College of Optical Sciences, The University of Arizona, Tucson, Arizona 85721, USA."
 }
 ],
-"year": 2006,
-"venue": "Science",
-"doi": "10.1126/science.1125907",
+"year": 2010,
+"venue": "Nature",
+"doi": "10.1038/nature09521",
 "url": null
 },
-"abstract": "Using the freedom of design that metamaterials provide, we show how electromagnetic fields can be redirected at will and propose a design strategy. The conserved fields—electric displacement field D, magnetic induction field B, and Poynting vector S—are all displaced in a consistent manner. A simple illustration is given of the cloaking of a proscribed volume of space to exclude completely all electromagnetic fields. Our work has relevance to exotic lens design and to the cloaking of objects from electromagnetic fields."
+"abstract": "This letter demonstrates a quasi-real-time dynamic holographic 3D display by combining holographic stereography with a large-area updatable photorefractive polymer. Using a 50 Hz nanosecond pulsed laser to write hogels, the system refreshes images about every two seconds, supports multi-colour via angular multiplexing, and extends to full parallax via spatial multiplexing. A telepresence proof-of-concept captures multiple camera views at one site and transmits them over Ethernet to print and display a dynamic 3D hologram at another site."
 },
 "normalized": {
 "section_map": [
 {
-"name": "Motivation and metamaterials background",
+"name": "Motivation and background",
 "page_start": 1,
 "page_end": 1,
-"summary": "Introduces metamaterials as a route to unprecedented control over permittivity/permeability profiles and motivates a new paradigm for electromagnetic device design."
+"summary": "Positions holography as a natural 3D display modality and argues prior barriers were compute limits for CGH and the lack of large-area, dynamically updatable media."
 },
 {
-"name": "Field “dragging” via coordinate transformations",
+"name": "Pulsed holographic stereographic display overview",
+"page_start": 1,
+"page_end": 2,
+"summary": "Introduces the hogel-based stereographic approach and a 50 Hz nanosecond pulsed-laser writer that records a hogel per pulse to dramatically speed writing and reduce vibration sensitivity."
+},
+{
+"name": "Photorefractive polymer material and device",
 "page_start": 2,
 "page_end": 2,
-"summary": "Presents the conceptual picture of embedding fields in a deformable coordinate mesh and shows how Maxwell’s equations retain form under coordinate changes with renormalized material parameters."
+"summary": "Describes the sensitized photorefractive polymer composite, device fabrication between ITO plates, and diffraction efficiency dynamics following a single 6 ns writing pulse."
 },
 {
-"name": "Cloaking construction for a spherical region",
+"name": "Colour and parallax extensions",
 "page_start": 2,
 "page_end": 3,
-"summary": "Defines a transformation that compresses space to create a cloaked inner region and derives the required anisotropic, inhomogeneous ε and μ profiles for the cloak."
+"summary": "Demonstrates multi-colour holograms via angular multiplexing and presents a spatial multiplexing method (lens array + HOE) to accelerate full-parallax recording."
 },
 {
-"name": "Illustrations and properties",
-"page_start": 2,
-"page_end": 3,
-"summary": "Uses ray-tracing (geometric optics) and an electrostatic example to illustrate field guidance and exclusion; connects the outer boundary to perfectly matched layer conditions."
-},
-{
-"name": "Practical considerations and limitations",
+"name": "Telepresence demonstration and implications",
 "page_start": 3,
-"page_end": 3,
-"summary": "Discusses singular behavior near the central ray, the need for anisotropy and extreme parameter values, and bandwidth limits due to dispersion/causality constraints."
-},
-{
-"name": "References and supporting online material",
-"page_start": 3,
-"page_end": 3,
-"summary": "Lists references and points to supporting online material containing additional methods/details."
+"page_end": 4,
+"summary": "Implements a multi-camera capture pipeline and Ethernet transmission to continuously refresh holograms, then discusses application directions such as telemedicine."
 }
 ],
 "figures": [
 {
-"id": "Fig. 1",
+"id": "Figure 1",
 "page": 1,
-"caption": "A field line in free space with the background Cartesian coordinate grid shown, and the distorted field line with background coordinates distorted in the same fashion (field could be D, B, or Poynting vector S).",
-"why_important": "Conveys the core intuition: ‘dragging’ fields by distorting coordinates, which underpins transformation-based design."
+"caption": "Example of diffraction efficiency dynamics under single nanosecond pulse writing.",
+"why_important": "Provides empirical evidence that a single 6 ns pulse can induce a usable photorefractive grating that evolves over tens of seconds, underpinning the write-once-per-hogel strategy."
 },
 {
-"id": "Fig. 2",
+"id": "Figure 2",
 "page": 2,
-"caption": "Ray-tracing illustration of rays diverted within the annulus R1 ≤ r ≤ R2 to emerge undeviated on the far side (2D cross section and 3D view), assuming R2 ≫ λ.",
-"why_important": "Provides the main visual evidence that the cloak guides energy flow around the hidden region in the geometric-optics regime."
+"caption": "Image from a hologram recorded with the pulsed system showing left/center/right perspectives of a model aeroplane.",
+"why_important": "Qualitatively demonstrates 3D parallax and occlusion in the refreshed hologram, supporting that the display produces view-dependent imagery."
 },
 {
-"id": "Fig. 3",
+"id": "Figure 3",
 "page": 2,
-"caption": "Near-field illustration: electric displacement field lines for a point charge near the cloaked sphere (R2 ≪ λ), showing exclusion from the cloaked region and undisturbed emergence outside.",
-"why_important": "Shows the concept extends beyond propagating waves to (quasi-)static near-fields, supporting the ‘shielding’ claim."
+"caption": "Pictures of coloured holograms (model cars; vase and flowers).",
+"why_important": "Shows the feasibility of multi-colour holograms in the polymer using angular multiplexing and LED readout."
+},
+{
+"id": "Figure 4",
+"page": 3,
+"caption": "Full parallax recording sketch and multiple perspectives of a full parallax hologram.",
+"why_important": "Illustrates the key engineering step for full-parallax acceleration: spatial multiplexing to record many hogels per pulse."
+},
+{
+"id": "Figure 5",
+"page": 3,
+"caption": "Telepresence system hologram example and 12 inch × 12 inch photorefractive device prototype.",
+"why_important": "Provides a proof-of-concept that the capture/transmit/print loop can create a dynamic telepresence hologram and hints at scalability of device size."
 }
 ],
 "tables": [],
 "contributions": [
 {
-"text": "Introduces a metamaterial-enabled design strategy that redirects electromagnetic conserved quantities (D, B, S) by constructing materials corresponding to coordinate distortions, grounded in exact Maxwell-equation transformations.",
+"text": "A quasi-real-time updatable holographic stereographic 3D display that refreshes approximately every two seconds using a large-area photorefractive polymer and a 50 Hz nanosecond pulsed-laser hogel writer.",
 "confidence": 0.9,
 "evidence": [
 {
+"page": 1,
+"quote": "demonstrate a holographic display that can refresh images every two seconds.",
+"why": "This directly states the achieved refresh rate for the dynamic holographic display. "
+},
+{
+"page": 1,
+"quote": "A 50 Hz nanosecond pulsed laser is used to write the holographic pixels",
+"why": "Identifies the key enabling write mechanism: pulsed recording at 50 Hz. "
+},
+{
 "page": 2,
-"quote": "These conclusions follow from exact manipulations of Maxwell_s equations and are not confined to a ray approximation.",
-"why": "Directly states the proposed strategy is derived from exact Maxwell-equation manipulations rather than only geometric optics."
+"quote": "recording a 4 inch 3 4 inch sample in about 2 s, with 1-mm hogel resolution.",
+"why": "Gives a concrete end-to-end write time and spatial sampling for a representative display size. "
 }
 ]
 },
 {
-"text": "Formulates a practical ‘field dragging’ recipe: represent a desired field distortion as a coordinate transformation, then compute the required spatially varying permittivity and permeability tensors.",
-"confidence": 0.85,
+"text": "A sensitized photorefractive polymer composite device formulation and fabrication approach that supports pulsed writing and repeated rewriting without additional processing.",
+"confidence": 0.78,
 "evidence": [
 {
-"page": 3,
-"quote": "The distortion of the fields is represented as a coordinate transformation, which is then used to generate values of electrical permittivity and magnetic permeability",
-"why": "Summarizes the paper’s core method as a coordinate transformation followed by computing ε and μ profiles."
+"page": 2,
+"quote": "PATPD/CAAN:FDCST:ECZ:PCBM (49.5:30:20:0.5 wt%)",
+"why": "Specifies the composite formulation used to realize the dynamic photorefractive device. "
+},
+{
+"page": 2,
+"quote": "we doped the polymer with a fullerene derivative, PCBM",
+"why": "Highlights the sensitization choice intended to enable response to nanosecond pulses. "
+},
+{
+"page": 2,
+"quote": "our device is self-developing and there is no need for additional material processing",
+"why": "Clarifies the operational advantage versus processed static holographic media. "
 }
 ]
 },
 {
-"text": "Derives a spherical cloaking transformation that compresses space from r ≤ R2 into an annulus R1 ≤ r ≤ R2, yielding explicit anisotropic ε and μ profiles that, in principle, eliminate scattering from an arbitrary hidden object.",
+"text": "Multi-colour holographic 3D capability via angular multiplexing with separate LED readout for red-green-blue channels, recorded without increasing recording time.",
+"confidence": 0.76,
+"evidence": [
+{
+"page": 2,
+"quote": "Up to three different holograms are written in the material at different angles",
+"why": "Describes the core multi-colour approach: multiple angle-multiplexed holograms. "
+},
+{
+"page": 2,
+"quote": "The three holograms are recorded simultaneously, so the recording speed for the coloured holograms is the same",
+"why": "Supports the claim that colour does not slow down the recording process. "
+}
+]
+},
+{
+"text": "A full-parallax acceleration method using spatial multiplexing (lens array + holographic optical element) to record many hogels simultaneously, demonstrated at 100 hogels per pulse.",
 "confidence": 0.8,
 "evidence": [
 {
-"page": 2,
-"quote": "compressing them into the region R1 G r G R2, r¶ 0 R1 þ r(R2 j R1)=R2",
-"why": "Gives the key space-compression mapping used to create the cloaked region."
+"page": 3,
+"quote": "we demonstrated the simultaneous recording of 100 hogels with a single pulse",
+"why": "States the multiplexed write factor enabling faster full-parallax holograms. "
 }
 ]
 },
 {
-"text": "Connects the cloak’s outer boundary conditions to perfectly matched layers (PML), arguing the interface is reflectionless by construction.",
-"confidence": 0.8,
+"text": "A proof-of-concept holographic 3D telepresence pipeline capturing multiple viewpoints, transmitting them via Ethernet, and continuously refreshing a printed hologram at the display site.",
+"confidence": 0.82,
 "evidence": [
 {
 "page": 3,
-"quote": "the conditions for a perfectly matched layer (PML)... cloak, which is reflectionless by construction",
-"why": "Explicitly links the cloak boundary to PML and claims reflectionlessness follows from that construction."
+"quote": "Our 3D telepresence set-up consists of 16 Firewire cameras",
+"why": "Defines the multi-view capture apparatus used for telepresence. "
+},
+{
+"page": 3,
+"quote": "sent to the holographic recording controller through a 100 Mbit s21 Ethernet link",
+"why": "Describes the network transmission component enabling remote hologram printing. "
 }
 ]
 }
 ],
 "claims": [
 {
-"text": "With suitable metamaterials, electromagnetic fields can be guided to avoid objects and return undisturbed to their original trajectories.",
-"confidence": 0.85,
+"text": "The pulsed holographic recording setup is comparatively insensitive to vibration and can operate without special vibration/noise/temperature control.",
+"confidence": 0.72,
 "evidence": [
 {
 "page": 2,
-"quote": "made to avoid objects and flow around them like a fluid, returning undisturbed to their original trajectories.",
-"why": "Directly claims the ability to route fields around obstacles while preserving the external field pattern."
+"quote": "insensitive to vibration owing to the short pulse duration.",
+"why": "Links vibration robustness to nanosecond pulse recording. "
+},
+{
+"page": 2,
+"quote": "capable of operation in an industrial environment without any special need for vibration, noise or temperature control.",
+"why": "Explicitly claims relaxed environmental constraints versus prior setups. "
 }
 ]
 },
 {
-"text": "The proposed cloak can, in principle, create a perfect electromagnetic shield, excluding both propagating waves and near-fields from the concealed region (and preventing escape from it).",
+"text": "The recorded holograms can be viewed with an incoherent LED under ambient room light.",
 "confidence": 0.75,
 "evidence": [
 {
 "page": 2,
-"quote": "a perfect electromagnetic shield, excluding both propagating waves and near-fields from the concealed region.",
-"why": "States the strongest form of the shielding/cloaking claim, including near-field exclusion."
+"quote": "viewed using an incoherent coloured LED and is clearly visible under ambient room light.",
+"why": "Directly supports claim of practical viewing conditions (LED + room light). "
 }
 ]
 },
 {
-"text": "At the cloak’s outer surface, the material parameters satisfy PML-like conditions, making the cloak reflectionless by construction.",
-"confidence": 0.8,
+"text": "For colour holograms, each multiplexed hologram achieves about 0.5% diffraction efficiency, sufficient for ambient viewing.",
+"confidence": 0.7,
 "evidence": [
 {
 "page": 3,
-"quote": "conditions for a perfectly matched layer (PML)... cloak, which is reflectionless by construction",
-"why": "Asserts both the PML boundary condition and the reflectionless consequence."
+"quote": "The diffraction efficiency for each hologram is 0.5%, which is large enough to be viewed under ambient light conditions.",
+"why": "Provides the reported diffraction efficiency and the authors’ sufficiency judgment. "
 }
 ]
 },
 {
-"text": "In the paper’s illustrative design, full cloaking performance is only achievable at a single frequency because the required parameters must be dispersive.",
-"confidence": 0.85,
+"text": "In the telepresence configuration, the system continuously updates the hologram by writing subsequent hogels as new data arrives, enabling a continuously refreshed 3D image.",
+"confidence": 0.68,
 "evidence": [
 {
 "page": 3,
-"quote": "the effect is only achieved at one frequency... the cloaking parameters must disperse with frequency",
-"why": "Explicitly argues that dispersion forces single-frequency optimality for the given cloak."
+"quote": "the 3D images are refreshed continuously.",
+"why": "States continuous refresh behavior in the telepresence write loop. "
+},
+{
+"page": 3,
+"quote": "Once a hologram has been written, the system uses the next available hogels to update the information.",
+"why": "Explains the mechanism for incremental updating across hogels. "
 }
 ]
 },
 {
-"text": "Metamaterials make realization of these transformation-based electromagnetic designs a practical possibility (in principle).",
-"confidence": 0.65,
+"text": "The Ethernet bandwidth required for the demonstrated telepresence pipeline is well below the link capacity for the given hogel count and update cadence.",
+"confidence": 0.66,
 "evidence": [
 {
 "page": 3,
-"quote": "metamaterials is invoked, making realization of these designs a practical possibility.",
-"why": "States the authors’ view that metamaterials enable practical construction of the required ε/μ profiles."
+"quote": "used at less than 10% of its capacity.",
+"why": "Quantifies link utilization for their HPO telepresence configuration. "
 }
 ]
 }
 ],
 "limitations": [
 {
-"text": "The spherical cloak involves an unavoidable singular behavior near the ‘central’ ray, implying very rapid spatial variation and requiring anisotropy because space is compressed anisotropically.",
+"text": "The demonstrated refresh rate is quasi-real-time (about every 2 seconds), not video-rate holographic display.",
 "status": "known",
 "evidence": [
 {
-"page": 3,
-"quote": "There is an unavoidable singularity in the ray tracing... Anisotropy of the medium is necessary because we have compressed space anisotropically.",
-"why": "Directly states both the singularity issue and the necessity of anisotropy for the compression mapping."
+"page": 1,
+"quote": "refresh images every two seconds",
+"why": "A 2-second refresh implies ~0.5 Hz update, below typical video rates. "
 }
 ]
 },
 {
-"text": "Achieving extremely large or extremely small values of ε and μ is practically challenging; cloaking will be imperfect to the degree Eq. 7 is not satisfied.",
+"text": "Without multiplexing, full-parallax recording scales poorly in hogel count (10,000 vs 100) and would take more than 3 minutes even with the pulsed system.",
 "status": "known",
 "evidence": [
 {
 "page": 3,
-"quote": "achieving very large or very small values of e¶ and m¶ can be... cloaking will be imperfect to the degree that we fail to satisfy Eq. 7.",
-"why": "Identifies implementability constraints and explicitly ties performance degradation to parameter mismatch."
+"quote": "HPO requires 100 hogels whereas full parallax requires 10,000 hogels.",
+"why": "Shows the quadratic hogel scaling from HPO to full parallax. "
+},
+{
+"page": 3,
+"quote": "the recording time becomes more than 3 min for full parallax.",
+"why": "Explicitly states the resulting time penalty for full parallax. "
 }
 ]
 },
 {
-"text": "For the presented example, the cloak is not broadband: dispersion is required and full effectiveness occurs only at a single frequency (unless special embedding-media conditions apply).",
+"text": "The hologram naturally fades after a couple of minutes due to decay, requiring rewriting for persistence.",
 "status": "known",
 "evidence": [
 {
-"page": 3,
-"quote": "the effect is only achieved at one frequency... therefore can only be fully effective at a single frequency.",
-"why": "Directly states the frequency-specific nature of the illustrative cloak due to dispersion constraints."
+"page": 2,
+"quote": "The hologram fades away after a couple of minutes by natural dark decay",
+"why": "Indicates limited retention time under dark decay conditions. "
 }
 ]
+},
+{
+"text": "Experimental evaluation is largely qualitative (photos/movies) with limited quantitative metrics on image quality, crosstalk, resolution, or perceptual performance.",
+"status": "unknown",
+"evidence": []
+},
+{
+"text": "The system relies on specialized hardware (high-energy pulsed laser and electrically biased photorefractive device), which may limit cost/portability and complicate deployment.",
+"status": "unknown",
+"evidence": []
 }
 ],
-"method_summary": "The paper frames electromagnetic design as a coordinate-transformation problem: specify a desired distortion of space (and thus field lines/energy flow), then compute the spatially varying, generally anisotropic permittivity and permeability tensors that make Maxwell’s equations in the distorted coordinates equivalent to those in physical space. A key application is a spherical cloak created by compressing all points in r ≤ R2 into an annulus R1 ≤ r ≤ R2, producing ε(r) and μ(r) profiles that guide fields around an inner ‘secure’ region while matching to free space at r = R2.",
-"experiments_summary": "No physical experiments are reported. The authors illustrate behavior using (i) ray-tracing in the geometric-optics regime (R2 ≫ λ), showing rays guided around the cloaked region and re-emerging undeviated, and (ii) an electrostatic/near-field example (R2 ≪ λ) showing exclusion of displacement-field lines from the cloaked region for a nearby point charge.",
+"method_summary": "The display records a holographic stereogram by scanning ‘hogels’ (holographic pixels), each written by a single 6 ns laser pulse at 50 Hz into a sensitized photorefractive polymer device between ITO electrodes. Multi-colour is achieved by angular multiplexing (separate Bragg-matched readout LEDs), and full parallax is accelerated via spatial multiplexing using a lens array and holographic optical element to write many hogels per pulse. Telepresence uses multi-view capture, converts views to hogel data, transmits over Ethernet, and continuously writes updated hogels while simultaneous LED readout displays the 3D scene.",
+"experiments_summary": "The paper presents diffraction-efficiency dynamics after single-pulse writing (Fig. 1), qualitative images of HPO holograms demonstrating parallax/occlusion (Fig. 2), colour hologram examples (Fig. 3), a full-parallax optical multiplexing concept with multiple viewpoints of a 3D scene (Fig. 4), and a telepresence prototype using 16 cameras with Ethernet transmission to a hologram printer/display (Fig. 5).",
 "reproducibility": {
-"code_status": "unavailable",
-"data_status": "unavailable",
-"notes": "The main article presents equations and qualitative simulation descriptions, but not executable code or datasets. Additional ‘Methods’/details are referenced as Supporting Online Material.",
-"evidence": [
-{
-"page": 3,
-"quote": "Methods are available as supporting material on Science Online.",
-"why": "Indicates key implementation/method details are offloaded to supporting online material rather than fully contained in the main text."
-},
-{
-"page": 3,
-"quote": "Supporting Online Material [www.sciencemag.org/cgi/content/full/1125907/DC1](http://www.sciencemag.org/cgi/content/full/1125907/DC1)",
-"why": "Provides the location of additional material that would be needed to reproduce details beyond the short Science report."
-}
-]
+"code_status": "unknown",
+"data_status": "unknown",
+"notes": "The letter describes hardware, material composition, and some operating parameters, but does not indicate public release of code, datasets, or detailed build files/procedures sufficient for full replication.",
+"evidence": []
 }
 },
 "personas": [
 {
-"id": "critic",
-"title": "Critic",
+"id": "optimist",
+"title": "Optimist",
 "highlights": [
 {
-"point": "The strongest ‘perfect cloak/shield’ claims hinge on idealized parameter profiles; the authors acknowledge that practical deviations from Eq. 7 make cloaking imperfect.",
-"severity": "high",
-"evidence": [
-{
-"page": 3,
-"quote": "In practice, cloaking will be imperfect to the degree that we fail to satisfy Eq. 7.",
-"why": "Explicitly states that practical inability to meet the exact material prescription degrades cloaking."
-}
-]
-},
-{
-"point": "A singularity and tight ray bending near the center demand strong anisotropy and rapid parameter variation, making fabrication and loss control difficult.",
-"severity": "high",
-"evidence": [
-{
-"page": 3,
-"quote": "There is an unavoidable singularity... implies very rapid changes in e¶ and m¶... Anisotropy of the medium is necessary",
-"why": "Links singular behavior to rapid ε/μ variation and required anisotropy."
-}
-]
-},
-{
-"point": "Bandwidth is fundamentally constrained in the presented design: full effectiveness occurs only at a single frequency due to required dispersion.",
-"severity": "high",
-"evidence": [
-{
-"page": 3,
-"quote": "the effect is only achieved at one frequency... the cloaking parameters must disperse with frequency",
-"why": "Directly argues that dispersion forces frequency-specific optimal cloaking for the example."
-}
-]
-},
-{
-"point": "The cloak assumes complete isolation of the concealed region (no radiation in or out), which may conflict with desired functionality (e.g., sensors/communication) and is not discussed.",
-"severity": "med",
+"point": "Achieves a major speed jump for rewritable holographic 3D displays by writing one hogel per nanosecond pulse and refreshing an image in ~2 seconds.",
+"severity": "low",
 "evidence": [
 {
 "page": 2,
-"quote": "no radiation can get into the concealed volume, nor can any radiation get out.",
-"why": "States the isolation assumption, implying a trade-off with any need for interaction with the outside."
-}
-]
-}
-],
-"questions_to_ask": [
-{
-"q": "Quantitatively, how sensitive is scattering reduction to discretization, losses, and deviations from the ideal ε/μ profiles (especially near the singular region)?",
-"evidence": [
-{
-"page": 3,
-"quote": "achieving very large or very small values of e¶ and m¶ can be... cloaking will be imperfect",
-"why": "Motivates asking about robustness because the authors flag practical difficulty and imperfect performance when the prescription isn’t met."
+"quote": "recording a 4 inch 3 4 inch sample in about 2 s",
+"why": "This is the core performance milestone enabling ‘quasi-real-time’ operation. "
 }
 ]
 },
 {
-"q": "How is the singularity near the central ray regularized in any realizable implementation (cutoffs, smoothing, core modifications), and what performance penalty results?",
+"point": "Demonstrates a complete end-to-end holographic 3D telepresence concept (capture → transmit → print → view) rather than only isolated components.",
+"severity": "low",
 "evidence": [
 {
-"page": 3,
-"quote": "There is an unavoidable singularity in the ray tracing",
-"why": "Raises the need for a practical treatment of the singular behavior."
+"page": 1,
+"quote": "3D telepresence is demonstrated by taking multiple images from one location and transmitting the information via Ethernet",
+"why": "Summarizes the telepresence pipeline and remote printing idea. "
 }
 ]
 },
 {
-"q": "What is the achievable operational bandwidth once physically realizable dispersion models and causality constraints are enforced?",
+"point": "Uses a large-area polymer recording medium, suggesting better scalability than inorganic photorefractive crystals for display-sized devices.",
+"severity": "low",
 "evidence": [
 {
-"page": 3,
-"quote": "can only be fully effective at a single frequency",
-"why": "Directly points to bandwidth limitations that invite quantitative characterization."
-}
-]
+"page": 1,
+"quote": "crystalline materials are not scalable in size owing to their laborious growth process",
+"why": "Motivates polymer choice as a scalability advantage. "
 }
 ]
 },
 {
-"id": "repro_police",
-"title": "ReproPolice",
-"highlights": [
-{
-"point": "Key methodological details are relegated to Supporting Online Material, limiting reproducibility from the short report alone.",
-"severity": "med",
-"evidence": [
-{
-"page": 3,
-"quote": "Methods are available as supporting material on Science Online.",
-"why": "Signals that reproducing full details requires external materials beyond the PDF content."
-}
-]
-},
-{
-"point": "No code or numerical configuration details (meshes, solvers, parameters beyond the analytic ε/μ forms) are provided for the ray-tracing or electrostatic illustrations.",
-"severity": "med",
+"point": "Adds multi-colour capability with simultaneous recording via angular multiplexing, keeping speed comparable to monochrome recording.",
+"severity": "low",
 "evidence": [
 {
 "page": 2,
-"quote": "A ray-tracing program has been used to calculate ray trajectories in the cloak",
-"why": "Mentions simulation use without providing implementation details needed for reproduction."
+"quote": "The three holograms are recorded simultaneously, so the recording speed for the coloured holograms is the same",
+"why": "Supports the claim that colour does not reduce throughput. "
 }
 ]
 },
 {
-"point": "Fabrication/realization details for the required anisotropic inhomogeneous metamaterial are not specified in the report; readers are pointed to external references for metamaterial construction.",
+"point": "Introduces a practical route to full-parallax updates by multiplexing 100 hogels per pulse, directly attacking the quadratic hogel-scaling bottleneck.",
+"severity": "low",
+"evidence": [
+{
+"page": 3,
+"quote": "simultaneous recording of 100 hogels with a single pulse",
+"why": "Quantifies the multiplexing factor for full-parallax acceleration. "
+}
+]
+}
+]
+},
+{
+"id": "critics",
+"title": "Critics",
+"highlights": [
+{
+"point": "The demonstrated update rate is far below video-rate; ‘quasi-real-time’ may still feel sluggish for interactive telepresence.",
 "severity": "med",
 "evidence": [
 {
 "page": 1,
-"quote": "Further information on the design and construction of metamaterials may be found in (9–13).",
-"why": "Indicates practical construction details are not included here and must be sought in other sources."
-}
-]
-}
-],
-"questions_to_ask": [
-{
-"q": "What exact numerical procedures (Hamiltonian form, step sizes, boundary handling) were used in the ray-tracing, and can the authors release the simulation code/configuration?",
-"evidence": [
-{
-"page": 3,
-"quote": "numerical integration of a set of Hamilton_s equations",
-"why": "Shows a specific computational method is used, inviting disclosure of details/code for reproducibility."
+"quote": "refresh images every two seconds",
+"why": "A 2-second refresh implies ~0.5 Hz updates. "
 }
 ]
 },
 {
-"q": "What additional derivations/assumptions appear in the Supporting Online Material (e.g., non-orthogonal coordinates, implementation recipes) that are necessary to reproduce the full method?",
+"point": "Full parallax remains expensive without multiplexing and is still non-trivial even with the proposed acceleration approach.",
+"severity": "med",
 "evidence": [
 {
 "page": 3,
-"quote": "Supporting Online Material [www.sciencemag.org/cgi/content/full/1125907/DC1](http://www.sciencemag.org/cgi/content/full/1125907/DC1)",
-"why": "Points to missing supporting content that likely contains reproducibility-critical details."
+"quote": "full parallax requires 10,000 hogels",
+"why": "Highlights the steep scaling barrier that drives complexity. "
 }
 ]
+},
+{
+"point": "Hologram persistence is limited; natural decay causes the image to fade within minutes, which may constrain use cases.",
+"severity": "med",
+"evidence": [
+{
+"page": 2,
+"quote": "fades away after a couple of minutes",
+"why": "Shows limited retention time, requiring continual rewriting. "
+}
+]
+},
+{
+"point": "Reported diffraction efficiency (~0.5% per colour hologram) may constrain brightness, viewing angle margin, and scaling to larger screens in brighter environments.",
+"severity": "med",
+"evidence": [
+{
+"page": 3,
+"quote": "diffraction efficiency for each hologram is 0.5%",
+"why": "Brightness and efficiency are key practical constraints for displays. "
+}
+]
+},
+{
+"point": "Results are primarily qualitative (photos/videos) with limited quantitative characterization of image quality, crosstalk, resolution, latency, or user perception.",
+"severity": "high",
+"evidence": []
+},
+{
+"point": "System complexity and cost (high-energy pulsed laser, high-voltage biased polymer device, precision optics/stages) could be a major barrier to widespread deployment.",
+"severity": "high",
+"evidence": []
 }
 ]
 },
@@ -390,179 +481,179 @@
 "title": "Theory",
 "highlights": [
 {
-"point": "The approach is principled: it relies on form-invariance of Maxwell’s equations under coordinate transformations, translating geometry distortions into ε/μ tensors.",
+"point": "The approach is grounded in holographic stereography (integral holography), trading full complex wavefront reproduction for manageable hogel-based data while retaining parallax and occlusion cues.",
+"severity": "low",
+"evidence": [
+{
+"page": 1,
+"quote": "holographic stereographic technique",
+"why": "Identifies the core methodological foundation. "
+}
+]
+},
+{
+"point": "Photorefractive grating formation after a short pulse is explained as a slower post-exposure process (photoconduction, trapping, molecular orientation) rather than instantaneous recording.",
 "severity": "low",
 "evidence": [
 {
 "page": 2,
-"quote": "The equations have exactly the same form in any coordinate system, but... permittivity e and permeability m—are scaled",
-"why": "States the theoretical basis: coordinate changes can be absorbed into renormalized material parameters."
+"quote": "photoconduction, charge trapping, and molecular orientation",
+"why": "Connects the observed rise-time dynamics to known photorefractive mechanisms. "
 }
 ]
 },
 {
-"point": "The authors emphasize the method is not merely ray optics; the conclusions follow from exact Maxwell-equation manipulations and apply in principle across length scales.",
+"point": "Colour superposition is justified using Bragg’s law to compensate angular dispersion across wavelengths when writing/reading at different colours.",
 "severity": "low",
 "evidence": [
 {
 "page": 2,
-"quote": "not confined to a ray approximation... encompass in principle all forms of electromagnetic phenomena on all length scales.",
-"why": "Supports the claim of generality beyond the geometric-optics limit."
+"quote": "we used Bragg’s law to determine the required 5u angle",
+"why": "Shows a principled optical design step for colour alignment. "
 }
 ]
 },
 {
-"point": "A concrete spherical compression mapping is provided, yielding explicit anisotropic parameter functions for the cloaking shell.",
-"severity": "low",
-"evidence": [
-{
-"page": 2,
-"quote": "compressing them into the region R1 G r G R2",
-"why": "Identifies the core geometric transformation from which the cloak material prescription is derived."
-}
-]
-}
-],
-"questions_to_ask": [
-{
-"q": "How does the prescription generalize to non-orthogonal coordinate systems and arbitrary transformations, and what practical constraints emerge in those cases?",
-"evidence": [
-{
-"page": 2,
-"quote": "We have assumed orthogonal coordinate systems... The general case is given in (14) and in the accompanying online material",
-"why": "Indicates the report’s derivations assume orthogonality and defer generalization to other sources."
-}
-]
-},
-{
-"q": "What are the tightest causality/energy-transport constraints on transformation designs that appear to require superluminal phase velocity, and how do they shape feasible bandwidth?",
-"evidence": [
-{
-"page": 3,
-"quote": "the cloaking parameters must disperse with frequency and therefore can only be fully effective at a single frequency.",
-"why": "Connects phase/group velocity considerations to dispersion and bandwidth constraints, motivating a deeper theoretical bound analysis."
-}
-]
-}
-]
-},
-{
-"id": "experiments",
-"title": "Experiments",
-"highlights": [
-{
-"point": "Evidence is illustrative and simulation-based (ray tracing and electrostatic field plots); no laboratory prototype or measured scattering reduction is presented in this report.",
+"point": "Crosstalk mitigation in multiplexed colour writing leverages polarization orthogonality and symmetric incidence with respect to the external field direction.",
 "severity": "med",
 "evidence": [
 {
 "page": 2,
-"quote": "A ray-tracing program has been used to calculate ray trajectories in the cloak",
-"why": "Shows the primary evidence shown is computational rather than experimental."
+"quote": "When beams are orthogonally polarized, they do not interfere",
+"why": "Explains how unwanted hologram formation is avoided between channels. "
 }
 ]
 },
 {
-"point": "The paper uses different approximations for different regimes: geometric optics for R2 ≫ λ and electrostatic/magnetostatic for R2 ≪ λ.",
-"severity": "low",
+"point": "The paper implicitly assumes that hogel-based stereography is sufficient for telepresence despite not reproducing the full optical phase of the original scene.",
+"severity": "med",
 "evidence": [
 {
-"page": 3,
-"quote": "suppose that R2 d l... use the ray approximation... Alternatively, if R2 ¡ l... electrostatic... approximation applies.",
-"why": "Explicitly states the regime-dependent approximations used for the illustrations."
-}
-]
-},
-{
-"point": "They provide an additional numerical check via Hamiltonian ray equations derived from the geometric limit of Maxwell’s equations in anisotropic, inhomogeneous media.",
-"severity": "low",
-"evidence": [
-{
-"page": 3,
-"quote": "numerical integration of a set of Hamilton_s equations obtained by taking the geometric limit of Maxwell_s equations",
-"why": "Indicates a specific computational approach used to validate ray behavior in the cloak."
-}
-]
-}
-],
-"questions_to_ask": [
-{
-"q": "Do full-wave electromagnetic simulations (beyond geometric optics) confirm low scattering for wavelengths comparable to the cloak size and with realistic loss/dispersion?",
-"evidence": [
-{
-"page": 3,
-"quote": "suppose that R2 d l... use the ray approximation",
-"why": "Because results shown rely on the ray approximation for illustration, it motivates asking about full-wave validation outside that limit."
-}
-]
-},
-{
-"q": "Is there any experimental demonstration (measured scattering cross-section reduction) supporting the proposed parameter profiles, even at microwave frequencies?",
-"evidence": [
-{
-"page": 2,
-"quote": "A ray-tracing program has been used",
-"why": "The report describes simulations as evidence, prompting the question of whether experimental validation exists."
+"page": 1,
+"quote": "holographic stereography does not require the viewer to use eyewear",
+"why": "Frames the perceptual goal (3D perception) rather than full field reconstruction. "
 }
 ]
 }
 ]
 },
 {
-"id": "related_work",
-"title": "RelatedWork",
+"id": "experimenter",
+"title": "Experimenter",
 "highlights": [
 {
-"point": "Positions the work within metamaterials research, citing progress such as negative-index refraction and subwavelength-structured media enabling unusual ε/μ properties.",
+"point": "Provides a clear material recipe, device structure (ITO plates, spacers), and key dopants, which supports partial experimental reproducibility.",
 "severity": "low",
 "evidence": [
 {
-"page": 1,
-"quote": "metamaterials... can be designed to have properties difficult or impossible to find in nature... A negative index of refraction... enabled by using metamaterial concepts.",
-"why": "Shows the paper’s framing as an extension of metamaterials capabilities (including negative index) to transformation-based design."
+"page": 2,
+"quote": "between two ITO (indium tin oxide)-coated glass plates, with 100 mm spacers",
+"why": "Gives concrete fabrication details (electrodes and thickness control). "
 }
 ]
 },
 {
-"point": "Connects cloaking boundaries to perfectly matched layers (PML), linking the cloak concept to a well-studied reflectionless interface idea from computational electromagnetics.",
+"point": "Demonstrates single-pulse diffraction efficiency dynamics, but does not translate this into standardized display metrics (brightness, contrast, viewing cone, resolution).",
+"severity": "med",
+"evidence": [
+{
+"page": 1,
+"quote": "Example of diffraction efficiency dynamics under single nanosecond pulse writing.",
+"why": "Shows a measured dynamic, but broader display KPIs are not reported. "
+}
+]
+},
+{
+"point": "Telepresence pipeline is described with camera count and network rate, but latency breakdown (capture→process→write→view) and failure modes are not quantified.",
+"severity": "high",
+"evidence": [
+{
+"page": 3,
+"quote": "16 Firewire cameras ... every second",
+"why": "Defines capture cadence, but end-to-end latency is not fully characterized. "
+}
+]
+},
+{
+"point": "The paper compares to the authors’ earlier continuous-wave system, but lacks systematic baselines/ablations (e.g., dopant effects, voltage, pulse energy, hogel size).",
+"severity": "high",
+"evidence": [
+{
+"page": 2,
+"quote": "Our earlier rewritable 3D display19 used a continuous-wave",
+"why": "Provides narrative comparison, not a controlled benchmarking study. "
+}
+]
+},
+{
+"point": "Full-parallax acceleration is compelling (100 hogels/pulse), but the resulting full-parallax image quality and uniformity across the raster scan are not quantitatively validated.",
+"severity": "med",
+"evidence": [
+{
+"page": 3,
+"quote": "simultaneously writing 100 hogels; perspectives are respectively up right",
+"why": "Shows qualitative multi-view evidence, but not quantitative uniformity metrics. "
+}
+]
+}
+]
+},
+{
+"id": "literature_scout",
+"title": "Literature Scout",
+"highlights": [
+{
+"point": "Closest precursor from the same group: the earlier updatable holographic 3D display that was monochromatic and much slower, which this work directly improves upon.",
+"severity": "low",
+"evidence": [
+{
+"page": 1,
+"quote": "An updatable holographic three-dimensional display. Nature 451, 694–698 (2008).",
+"why": "Cited prior work (Tay et al.) is the primary baseline lineage. "
+}
+]
+},
+{
+"point": "For computation-heavy alternatives, see work on computer-generated holography and electroholography limitations that motivate stereographic hogel approaches.",
+"severity": "low",
+"evidence": [
+{
+"page": 1,
+"quote": "lack of sufficient computational power to produce realistic computer-generated holograms",
+"why": "The paper frames CGH as a key alternative constrained by computation. "
+}
+]
+},
+{
+"point": "Refreshable holographic display history includes photorefractive crystal demonstrations, with scalability issues contrasted against polymers.",
+"severity": "low",
+"evidence": [
+{
+"page": 1,
+"quote": "Photorefractive inorganic crystals have been used in the past to demonstrate refreshable holographic displays",
+"why": "Places the contribution in context of prior dynamic holography media. "
+}
+]
+},
+{
+"point": "For full-parallax / multiplexed 3D display architectures, the cited spatially multiplexed HOE array work is a relevant conceptual ancestor.",
+"severity": "med",
+"evidence": [
+{
+"page": 4,
+"quote": "Implementation of a spatially multiplexed pixilated three-dimensional display by use of a holographic optical element array.",
+"why": "Directly aligned with the paper’s HOE + lens-array multiplexing direction. "
+}
+]
+},
+{
+"point": "For ‘holographic cinematography’ lineage and the distinction from real-time replay, see the cited holographic movie work using processed media.",
 "severity": "low",
 "evidence": [
 {
 "page": 3,
-"quote": "conditions for a perfectly matched layer (PML)... connection between this cloak... and a well-studied reflectionless interface",
-"why": "Explicitly relates the cloak boundary to PML theory and reflectionless interfaces."
-}
-]
-},
-{
-"point": "Contrasts the proposed ‘object-independent’ cloaking (external radiation never reaches the object) with alternative concealment approaches that depend on knowing the object’s shape/material properties.",
-"severity": "low",
-"evidence": [
-{
-"page": 2,
-"quote": "an alternative scheme... relies on a specific knowledge of the shape and the material properties of the object being hidden.",
-"why": "Highlights a key differentiation versus approaches requiring object-specific tailoring."
-}
-]
-}
-],
-"questions_to_ask": [
-{
-"q": "How does this transformation-based cloak compare (in assumptions and achievable performance) to the referenced alternative concealment scheme that requires object knowledge?",
-"evidence": [
-{
-"page": 2,
-"quote": "an alternative scheme... relies on a specific knowledge of the shape and the material properties of the object being hidden.",
-"why": "Sets up a direct comparison point raised by the authors themselves."
-}
-]
-},
-{
-"q": "What practical metamaterial architectures (from the cited metamaterial construction literature) best approximate the required anisotropic, spatially varying ε/μ tensors for cloaking?",
-"evidence": [
-{
-"page": 1,
-"quote": "Further information on the design and construction of metamaterials may be found in (9–13).",
-"why": "Points readers to external construction work, motivating a concrete mapping from theory to realizable architectures."
+"quote": "Holographic cinematography has previously been demonstrated",
+"why": "Frames the novelty as near-real-time replay without post-processing delay. "
 }
 ]
 }
@@ -570,53 +661,57 @@
 }
 ],
 "final_synthesis": {
-"one_liner": "A transformation-optics blueprint: represent a desired distortion of electromagnetic fields as a coordinate transform and realize it with engineered ε/μ metamaterials—illustrated by a spherical cloak that (ideally) excludes fields from a hidden region while remaining reflectionless at its boundary.",
+"one_liner": "A large-area photorefractive polymer plus 50 Hz nanosecond pulsed hogel writing enables a rewritable holographic stereographic display that refreshes in ~2 seconds and supports a proof-of-concept 3D telepresence pipeline.",
 "strengths": [
-"Principled, compact framework grounded in Maxwell-equation form invariance under coordinate transformations.",
-"Clear constructive recipe (coordinate map → ε/μ tensors) with an explicit spherical cloaking example.",
-"Connects cloaking to PML/reflectionless-interface concepts, clarifying why matching can eliminate reflections.",
-"Addresses both propagating-wave (ray) intuition and near-field (electrostatic) intuition within the same design philosophy."
+"Demonstrates a substantial speed improvement for rewritable holographic 3D displays (single-pulse-per-hogel, ~2 s per 4×4 hologram).",
+"Uses a polymer recording medium positioned as scalable compared to photorefractive crystals.",
+"Shows multi-colour capability via simultaneous angular multiplexing and LED readout.",
+"Introduces spatial multiplexing (lens array + HOE) to address full-parallax scaling, with a 100-hogel-per-pulse demonstration.",
+"Builds an end-to-end telepresence proof-of-concept (multi-view capture + Ethernet transmission + continuous hologram refresh)."
 ],
 "weaknesses": [
-"Ideal performance relies on difficult-to-realize anisotropic and extreme ε/μ values; authors acknowledge imperfect cloaking in practice.",
-"Unavoidable singular behavior near the central ray demands rapid parameter variation and complicates realizability.",
-"Illustrative cloak is fundamentally frequency-limited (single-frequency optimality) due to dispersion constraints.",
-"No physical experimental validation is provided in this short report; evidence is mainly illustrative simulation/plots."
+"Update rate is quasi-real-time (seconds), not video-rate; telepresence may not be fluid for many interactions.",
+"Hologram persistence is limited (minutes) due to decay, requiring continuous rewriting.",
+"Evaluation is largely qualitative with limited quantitative image-quality, latency, and crosstalk metrics.",
+"System complexity and specialized hardware requirements may hinder practical deployment at scale.",
+"Full parallax remains challenging and requires additional multiplexing hardware to be time-feasible."
 ],
 "who_should_read": [
-"Researchers in metamaterials and transformation optics / electromagnetics",
-"Engineers working on wave control devices (cloaks, lenses, absorbers, PML-based designs)",
-"Applied physics readers interested in the theory-to-design link between geometry and material tensors",
-"Students seeking an origin point for transformation optics and cloaking literature"
+"Researchers working on dynamic holographic displays and photorefractive materials",
+"Optical engineers interested in high-throughput hologram printing / hogel writers",
+"AR/VR and telepresence technologists evaluating holographic display pathways",
+"Materials scientists developing sensitized polymer composites for fast holography",
+"Applied optics groups exploring full-parallax 3D display architectures"
 ],
 "suggested_rating": {
-"overall": 5,
-"confidence": 0.8
+"overall": 4,
+"confidence": 0.74
 },
 "evidence": [
 {
-"page": 2,
-"quote": "These conclusions follow from exact manipulations of Maxwell_s equations and are not confined to a ray approximation.",
-"why": "Supports the paper’s central claim of a general, principled method rather than a purely heuristic ray-optics argument."
-},
-{
-"page": 2,
-"quote": "a perfect electromagnetic shield, excluding both propagating waves and near-fields from the concealed region.",
-"why": "Captures the headline impact/application (ideal cloaking/shielding) that motivates the work."
+"page": 1,
+"quote": "demonstrate a holographic display that can refresh images every two seconds.",
+"why": "This is the headline performance claim defining the paper’s main advance. "
 },
 {
 "page": 3,
-"quote": "conditions for a perfectly matched layer (PML)... cloak, which is reflectionless by construction",
-"why": "Supports the ‘reflectionless matching’ part of the one-liner and explains why the boundary can avoid reflections."
+"quote": "To the best of our knowledge this is the first demonstration of holographic 3D telepresence.",
+"why": "Captures the novelty claim regarding telepresence demonstration. "
+},
+{
+"page": 3,
+"quote": "we demonstrated the simultaneous recording of 100 hogels with a single pulse",
+"why": "Supports the feasibility of accelerating full parallax via spatial multiplexing. "
 }
 ]
 },
 "diagnostics": {
 "unknowns": [
-"The PDF page contains additional unrelated Science reports (before/after the Pendry-Schurig-Smith report), so some surrounding text is not part of this paper.",
-"Full technical derivations and any implementation specifics appear to be partly in Supporting Online Material (SOM), which is referenced but not included here.",
-"The report does not provide detailed numerical settings, material loss models, or a fabrication pathway; those practical details may be absent or deferred to references/SOM."
+"Quantitative display performance metrics (brightness in cd/m^2, contrast, viewing cone, spatial/angular resolution, speckle) are not reported in a standardized way in the provided pages.",
+"End-to-end telepresence latency (capture + processing + transmission + write + perceptual) is not explicitly quantified.",
+"No explicit statement of public availability for code, CAD/optomechanical designs, or datasets; replicability may be limited to well-equipped optics labs.",
+"Long-term cycling endurance under continuous rewriting and illumination, and safety/engineering constraints for deployment, are not fully characterized in the provided pages."
 ],
-"notes": "Primary evidence extracted from the uploaded PDF. Key metadata and affiliations: . Core method claim (exact Maxwell, not ray-only): . Practical limitations (singularity, extreme parameters, single-frequency): . Supporting online material pointer and DOI: ."
+"notes": "Source paper: . JSON schema prompt reference: ."
 }
 }
