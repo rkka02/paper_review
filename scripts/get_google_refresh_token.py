@@ -23,7 +23,7 @@ def main(
     ),
     host: str = typer.Option("localhost", help="Local redirect host."),
     scope: str = typer.Option(
-        "drive.readonly",
+        "drive",
         help="OAuth scope preset: drive.readonly (download) or drive (upload+download).",
     ),
 ) -> None:
