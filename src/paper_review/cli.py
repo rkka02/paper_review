@@ -105,6 +105,22 @@ def worker(
 
 
 @app.command()
+def worker_serve(
+    host: str = "0.0.0.0",
+    port: int = 8001,
+    log_level: str = typer.Option("INFO", help="Logging level (DEBUG/INFO/WARNING/ERROR)."),
+) -> None:
+    """Run the worker loop with an HTTP /health endpoint (useful on PaaS that requires a port)."""
+    import uvicorn
+
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper(), logging.INFO),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    uvicorn.run("paper_review.worker_service:app", host=host, port=port, reload=False)
+
+
+@app.command()
 def analyze(paper_id: str) -> None:
     """Enqueue analysis for a paper id."""
     from paper_review.services import enqueue_analysis_run

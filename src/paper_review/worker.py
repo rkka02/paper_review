@@ -10,11 +10,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
+from sqlalchemy import text
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from paper_review.analysis_output import OPENAI_JSON_SCHEMA, validate_analysis
-from paper_review.db import db_session
+from paper_review.db import db_session, init_db
 from paper_review.drive import download_drive_file
 from paper_review.models import AnalysisOutput, AnalysisRun, EvidenceSnippet, Paper, PaperMetadata
 from paper_review.openai_http import create_response, delete_file, extract_output_json, upload_file
@@ -205,7 +206,12 @@ def _process_job(job: Job) -> None:
             if job.drive_file_id.startswith(_UPLOAD_PREFIX):
                 src_path = settings.upload_dir / f"{job.paper_id}.pdf"
                 if not src_path.exists():
-                    raise RuntimeError(f"Uploaded PDF missing: {src_path}")
+                    raise RuntimeError(
+                        "Uploaded PDF missing in this worker environment. "
+                        "If API and Worker run as separate services (Cloudtype), local uploads are not "
+                        "shared; set `UPLOAD_BACKEND=drive` (and configure Drive write creds) or "
+                        "use a Drive file id instead."
+                    )
                 t_copy = time.perf_counter()
                 shutil.copyfile(src_path, pdf_path)
                 timings["local_copy_s"] = time.perf_counter() - t_copy
@@ -333,6 +339,14 @@ def _mark_failed(run_id: uuid.UUID, err: Exception) -> None:
 
 
 def run_worker(*, once: bool = False) -> None:
+    init_db()
+    try:
+        with db_session() as db:
+            db.execute(text("select 1"))
+    except Exception:  # noqa: BLE001
+        logger.exception("db_connect_failed")
+        raise
+
     logger.info("worker_started poll_s=%s", settings.worker_poll_seconds)
     while True:
         job: Job | None = None

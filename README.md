@@ -64,6 +64,7 @@
   - `paper-review serve --host 0.0.0.0 --port $PORT --no-reload`
 - Worker(백그라운드): 시작 커맨드 예시
   - `paper-review worker --log-level INFO`
+  - (플랫폼이 포트 리슨을 요구하면) `paper-review worker-serve --host 0.0.0.0 --port $PORT`
 
 3) 환경변수(둘 다 동일하게)
 
@@ -72,7 +73,11 @@
 - Drive 다운로드(선택: 둘 중 하나)
   - OAuth: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`
   - Service account: `GOOGLE_SERVICE_ACCOUNT_FILE`(Cloudtype의 secret file/mount 기능 필요)
-- 업로드 테스트(선택): `UPLOAD_DIR` (Cloud 환경이면 `/tmp/uploads` 같은 경로 권장)
+- 업로드 테스트(선택):
+  - `UPLOAD_BACKEND=drive` 권장(서비스 분리 시 로컬 디스크는 공유되지 않음)
+  - `GOOGLE_DRIVE_SCOPE=https://www.googleapis.com/auth/drive`
+  - (선택) `GOOGLE_DRIVE_UPLOAD_FOLDER_ID`
+  - (로컬 저장을 쓰면) `UPLOAD_DIR` (Cloud 환경이면 `/tmp/uploads` 같은 경로 권장)
 
 4) 동작 확인
 

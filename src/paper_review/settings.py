@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     session_secret: str | None = Field(default=None, alias="SESSION_SECRET")
     cookie_https_only: bool = Field(default=False, alias="COOKIE_HTTPS_ONLY")
     upload_dir: Path = Field(default=_DEFAULT_UPLOAD_DIR, alias="UPLOAD_DIR")
+    upload_backend: str = Field(default="local", alias="UPLOAD_BACKEND")
 
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-4.1-mini", alias="OPENAI_MODEL")
@@ -39,6 +40,10 @@ class Settings(BaseSettings):
     google_client_secret: str | None = Field(default=None, alias="GOOGLE_CLIENT_SECRET")
     google_refresh_token: str | None = Field(default=None, alias="GOOGLE_REFRESH_TOKEN")
     google_service_account_file: str | None = Field(default=None, alias="GOOGLE_SERVICE_ACCOUNT_FILE")
+    google_drive_scope: str = Field(
+        default="https://www.googleapis.com/auth/drive.readonly", alias="GOOGLE_DRIVE_SCOPE"
+    )
+    google_drive_upload_folder_id: str | None = Field(default=None, alias="GOOGLE_DRIVE_UPLOAD_FOLDER_ID")
 
     semantic_scholar_api_key: str | None = Field(default=None, alias="SEMANTIC_SCHOLAR_API_KEY")
 

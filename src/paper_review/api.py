@@ -14,6 +14,7 @@ from starlette.responses import HTMLResponse
 from starlette.staticfiles import StaticFiles
 
 from paper_review.db import db_session, init_db
+from paper_review.drive import upload_drive_file
 from paper_review.models import AnalysisRun, AnalysisOutput, Paper, Review
 from paper_review.schemas import (
     AnalysisRunOut,
@@ -251,9 +252,31 @@ async def upload_paper_pdf(
     doi = (doi or "").strip() or None
     title = (title or "").strip() or None
 
+    drive_file_id: str
+    if settings.upload_backend.strip().lower() == "drive":
+        filename = f"{paper_id}.pdf"
+        if title:
+            safe = "".join([c if c.isalnum() or c in {" ", "_", "-"} else "_" for c in title]).strip()
+            if safe:
+                filename = f"{safe}.pdf"
+
+        try:
+            drive_file_id = upload_drive_file(
+                final_path,
+                filename=filename,
+                parent_folder_id=settings.google_drive_upload_folder_id,
+            )
+        finally:
+            try:
+                final_path.unlink(missing_ok=True)
+            except Exception:  # noqa: BLE001
+                pass
+    else:
+        drive_file_id = f"{_UPLOAD_PREFIX}{paper_id}"
+
     paper = Paper(
         id=paper_id,
-        drive_file_id=f"{_UPLOAD_PREFIX}{paper_id}",
+        drive_file_id=drive_file_id,
         pdf_sha256=hasher.hexdigest(),
         pdf_size_bytes=size,
         doi=doi,
