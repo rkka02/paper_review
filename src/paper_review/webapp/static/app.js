@@ -14,6 +14,7 @@ const pdfFileInput = $("pdfFile");
 const driveFileIdInput = $("driveFileId");
 const doiInput = $("doi");
 const titleInput = $("title");
+const analysisJsonFileInput = $("analysisJsonFile");
 const createBtn = $("createBtn");
 const createStatus = $("createStatus");
 
@@ -21,6 +22,9 @@ const refreshBtn = $("refreshBtn");
 const papersList = $("papersList");
 
 const analyzeBtn = $("analyzeBtn");
+const importJsonBtn = $("importJsonBtn");
+const importJsonFileInput = $("importJsonFile");
+const importJsonStatus = $("importJsonStatus");
 const stopPollBtn = $("stopPollBtn");
 const detailMeta = $("detailMeta");
 const detailError = $("detailError");
@@ -64,8 +68,22 @@ async function api(path, opts = {}) {
     },
   });
   if (!res.ok) {
-    const text = await res.text();
-    const msg = text || `${res.status} ${res.statusText}`;
+    const ct = res.headers.get("content-type") || "";
+    let msg = "";
+    if (ct.includes("application/json")) {
+      try {
+        const j = await res.json();
+        if (j && typeof j.detail === "string") msg = j.detail;
+        else if (j && j.detail !== undefined) msg = JSON.stringify(j.detail);
+        else msg = JSON.stringify(j);
+      } catch {
+        msg = "";
+      }
+    }
+    if (!msg) {
+      const text = await res.text().catch(() => "");
+      msg = text || `${res.status} ${res.statusText}`;
+    }
     const err = new Error(msg);
     err.status = res.status;
     throw err;
@@ -710,10 +728,12 @@ function applyDetailPayload(d, paperId) {
 async function loadDetails(paperId) {
   stopPolling();
   setText(detailError, "");
+  setText(importJsonStatus, "");
   setText(mdView, "");
   setText(jsonView, "");
   clearStructuredViews();
   analyzeBtn.disabled = !paperId;
+  importJsonBtn.disabled = !paperId;
   lastDetailOutputKey = null;
 
   if (!paperId) {
@@ -749,9 +769,46 @@ async function enqueueAnalyze() {
   await startPolling(selectedPaperId);
 }
 
+async function importJsonToSelectedPaper() {
+  if (!selectedPaperId) return;
+  const file =
+    importJsonFileInput.files && importJsonFileInput.files[0] ? importJsonFileInput.files[0] : null;
+  if (!file) return;
+
+  setText(importJsonStatus, "Working...");
+  try {
+    let parsed = null;
+    try {
+      const text = await file.text();
+      parsed = JSON.parse(text);
+    } catch (e) {
+      throw new Error(`Invalid JSON file: ${String(e.message || e)}`);
+    }
+
+    await api(`/api/papers/${selectedPaperId}/import-json`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(parsed),
+    });
+    importJsonFileInput.value = "";
+    setText(importJsonStatus, "Imported.");
+    await refreshPapers();
+    await loadDetails(selectedPaperId);
+    switchDetailTab("overview");
+  } catch (e) {
+    const msg = String(e.message || e);
+    alert(msg);
+    setText(importJsonStatus, `Error: ${msg}`);
+  } finally {
+    setTimeout(() => setText(importJsonStatus, ""), 4000);
+  }
+}
+
 async function createPaper() {
   createBtn.disabled = true;
   setText(createStatus, "Working...");
+  const jsonFile = analysisJsonFileInput.files && analysisJsonFileInput.files[0] ? analysisJsonFileInput.files[0] : null;
+  const usedJsonImport = !!jsonFile;
   try {
     const doi = doiInput.value.trim() || null;
     const title = titleInput.value.trim() || null;
@@ -759,7 +816,27 @@ async function createPaper() {
     const file = pdfFileInput.files && pdfFileInput.files[0] ? pdfFileInput.files[0] : null;
 
     let paper = null;
-    if (file) {
+    if (jsonFile) {
+      let parsed = null;
+      try {
+        const text = await jsonFile.text();
+        parsed = JSON.parse(text);
+      } catch (e) {
+        throw new Error(`Invalid JSON file: ${String(e.message || e)}`);
+      }
+      paper = await api(
+        `/api/papers/import-json?${new URLSearchParams({
+          drive_file_id: driveFileId || "",
+          doi: doi || "",
+          title: title || "",
+        }).toString()}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(parsed),
+        },
+      );
+    } else if (file) {
       paper = await api(
         `/api/papers/upload?${new URLSearchParams({ doi: doi || "", title: title || "" }).toString()}`,
         {
@@ -781,11 +858,14 @@ async function createPaper() {
     driveFileIdInput.value = "";
     doiInput.value = "";
     titleInput.value = "";
+    analysisJsonFileInput.value = "";
     setText(createStatus, "OK");
     await refreshPapers();
     await loadDetails(selectedPaperId);
   } catch (e) {
-    setText(createStatus, `Error: ${String(e.message || e)}`);
+    const msg = String(e.message || e);
+    if (usedJsonImport) alert(msg);
+    setText(createStatus, `Error: ${msg}`);
   } finally {
     createBtn.disabled = false;
     setTimeout(() => setText(createStatus, ""), 3000);
@@ -809,6 +889,12 @@ async function main() {
     if (selectedPaperId) await loadDetails(selectedPaperId);
   });
   analyzeBtn.addEventListener("click", enqueueAnalyze);
+  importJsonBtn.addEventListener("click", () => {
+    if (!selectedPaperId) return;
+    importJsonFileInput.value = "";
+    importJsonFileInput.click();
+  });
+  importJsonFileInput.addEventListener("change", importJsonToSelectedPaper);
   stopPollBtn.addEventListener("click", stopPolling);
 
   await refreshSession();

@@ -1,0 +1,468 @@
+{
+"paper": {
+"metadata": {
+"title": "Holographic three-dimensional telepresence using large-area photorefractive polymer",
+"authors": [
+{ "name": "P.-A. Blanche", "affiliation": "College of Optical Sciences, The University of Arizona" },
+{ "name": "A. Bablumian", "affiliation": "College of Optical Sciences, The University of Arizona" },
+{ "name": "R. Voorakaranam", "affiliation": "College of Optical Sciences, The University of Arizona" },
+{ "name": "C. Christenson", "affiliation": "College of Optical Sciences, The University of Arizona" },
+{ "name": "W. Lin", "affiliation": "Nitto Denko Technical Corporation" },
+{ "name": "T. Gu", "affiliation": "Nitto Denko Technical Corporation" },
+{ "name": "D. Flores", "affiliation": "Nitto Denko Technical Corporation" },
+{ "name": "P. Wang", "affiliation": "Nitto Denko Technical Corporation" },
+{ "name": "W.-Y. Hsieh", "affiliation": "Nitto Denko Technical Corporation" },
+{ "name": "M. Kathaperumal", "affiliation": "Nitto Denko Technical Corporation" },
+{ "name": "B. Rachwal", "affiliation": "Nitto Denko Technical Corporation" },
+{ "name": "O. Siddiqui", "affiliation": "Nitto Denko Technical Corporation" },
+{ "name": "J. Thomas", "affiliation": "College of Optical Sciences, The University of Arizona" },
+{ "name": "R. A. Norwood", "affiliation": "College of Optical Sciences, The University of Arizona" },
+{ "name": "M. Yamamoto", "affiliation": "Nitto Denko Technical Corporation" },
+{ "name": "N. Peyghambarian", "affiliation": "College of Optical Sciences, The University of Arizona" }
+],
+"year": 2010,
+"venue": "Nature",
+"doi": "10.1038/nature09521",
+"url": null
+},
+"abstract": "대면적 광굴절성(photorefractive) 폴리머를 기록 매체로 쓰고, 홀로그래픽 스테레오그래피 기법과 50 Hz 나노초 펄스 레이저로 ‘hogel’을 기록하여 2초마다 갱신 가능한 준실시간 3D 홀로그래픽 디스플레이 및 이더넷 기반 3D 텔레프레즌스를 시연한다. 각 hogel은 단일 나노초 펄스로 기록되며, 각도 다중화로 멀티컬러(최대 RGB) 및 공간 다중화로 풀 패럴랙스도 구현한다."
+},
+"normalized": {
+"section_map": [
+{
+"name": "배경 및 문제정의",
+"page_start": 1,
+"page_end": 1,
+"summary": "실시간 3D 텔레프레즌스를 가로막아온 요인(계산량, 동적 대면적 기록매체 부재)을 설명하고, 홀로그래피/홀로그래픽 스테레오그래피의 장점을 정리한다."
+},
+{
+"name": "준실시간 갱신을 위한 기록 시스템(펄스 레이저 + hogel 기록)",
+"page_start": 2,
+"page_end": 2,
+"summary": "6 ns, 50 Hz 펄스 레이저를 이용해 hogel을 단일 펄스로 기록하여 4×4 inch를 약 2초에 기록하는 구성을 설명하고, 진동 민감도 개선을 주장한다."
+},
+{
+"name": "광굴절 폴리머 재료 및 동특성",
+"page_start": 2,
+"page_end": 2,
+"summary": "PATPD/CAAN 기반 복합체(ECZ 플라스티사이저, FDCST 크로모포어, PCBM 도핑)와 ITO 전극 구조를 제시하고, 단일 펄스 후 회절 효율의 성장/감쇠 동특성을 설명한다."
+},
+{
+"name": "멀티컬러(각도 다중화) 및 풀 패럴랙스(공간 다중화)",
+"page_start": 2,
+"page_end": 3,
+"summary": "각도 다중화로 서로 다른 각도의 홀로그램을 기록해 RGB 읽기를 구현하고, 렌즈 어레이+HOE로 100 hogel 동시 기록(공간 다중화)해 풀 패럴랙스 기록 시간을 단축한다."
+},
+{
+"name": "3D 텔레프레즌스 데모(다중 카메라 + 이더넷 전송 + 연속 기록)",
+"page_start": 3,
+"page_end": 4,
+"summary": "16대 카메라로 매초 다시점 이미지를 취득해 hogel 데이터로 변환 후 100 Mbit/s 이더넷으로 전송하고, 수신 측이 연속적으로 홀로그램을 갱신/표시하는 텔레프레즌스를 시연한다."
+},
+{
+"name": "결론 및 응용 전망",
+"page_start": 4,
+"page_end": 4,
+"summary": "준실시간 동적 3D 디스플레이/텔레프레즌스의 개념 증명으로서 의의를 정리하고, 원격의료(특히 뇌수술) 등 응용 가능성을 제시한다."
+}
+],
+"figures": [
+{
+"id": "Figure 1",
+"page": 1,
+"caption": "Example of diffraction efficiency dynamics under single nanosecond pulse writing.",
+"why_important": "단일 6 ns 펄스로 기록한 뒤 수십 초 스케일로 회절 격자가 성장/감쇠하는 재료 동특성을 정량적으로 보여줘, ‘펄스 기록 + 자가현상’ 주장의 근거가 된다."
+},
+{
+"id": "Figure 2",
+"page": 2,
+"caption": "Image from a hologram recorded with the pulsed system (parallax/occlusion).",
+"why_important": "펄스 기록 시스템으로 만든 3D 홀로그램이 시점 변화에 따라 패럴랙스/가림(occlusion)을 제공함을 시각적으로 입증한다."
+},
+{
+"id": "Figure 3",
+"page": 2,
+"caption": "Pictures of coloured holograms (HPO geometry; vase/flowers).",
+"why_important": "각도 다중화 기반 멀티컬러(사실상 RGB) 재현 가능성을 보여준다."
+},
+{
+"id": "Figure 4",
+"page": 3,
+"caption": "Full parallax recording sketch using lens array + HOE; multiple perspectives.",
+"why_important": "풀 패럴랙스에서 hogel 수 급증 문제를 공간 다중화(100 hogel 동시 기록)로 해결하는 광학 설계 핵심을 제공한다."
+},
+{
+"id": "Figure 5",
+"page": 3,
+"caption": "Telepresence system: recorded hologram and photorefractive device prototype.",
+"why_important": "다시점 취득-전송-수신측 기록으로 이어지는 ‘3D 텔레프레즌스’ 시연 결과와 장치 스케일(예: 12×12 inch 프로토타입)을 보여준다."
+}
+],
+"tables": [],
+"contributions": [
+{
+"text": "대면적 광굴절 폴리머를 이용한 3D 홀로그래픽 디스플레이에서 2초 주기의 준실시간(퀘지-리얼타임) 갱신을 달성했다.",
+"confidence": 0.85,
+"evidence": [
+{ "page": 1, "quote": "demonstrate a holographic display that can refresh images every two seconds.", "why": "핵심 성과(2초 갱신)를 초록/리드 문장에서 직접 명시." },
+{ "page": 2, "quote": "recording a 4 inch 3 4 inch sample in about 2 s, with 1-mm hogel resolution.", "why": "구체적 기록 시간/크기/해상도 수치로 2초 갱신 주장 보강." }
+]
+},
+{
+"text": "각 hogel을 단일 나노초 펄스로 기록하는 펄스 기반 기록 체계를 도입해 진동 민감도를 낮추고 기록 속도를 크게 높였다.",
+"confidence": 0.8,
+"evidence": [
+{ "page": 2, "quote": "A single pulse is used to record an individual hogel", "why": "hogel 단위 기록의 핵심 메커니즘을 직접 서술." },
+{ "page": 2, "quote": "insensitive to vibration owing to the short pulse duration.", "why": "펄스 기반 기록이 환경 진동에 둔감하다는 설계 이점 근거." }
+]
+},
+{
+"text": "각도 다중화로 멀티컬러 홀로그래픽 3D 디스플레이를 구현하고, 공간 다중화(렌즈 어레이+HOE)로 풀 패럴랙스 기록 시간을 줄였다.",
+"confidence": 0.75,
+"evidence": [
+{ "page": 2, "quote": "To achieve a multi-colour holographic 3D display, we used angular multiplexing.", "why": "멀티컬러 구현 방법(각도 다중화)을 명시." },
+{ "page": 3, "quote": "simultaneous recording of 100 hogels with a single pulse", "why": "공간 다중화로 풀 패럴랙스 시간 단축의 핵심 수치(100 hogel 동시 기록)." }
+]
+},
+{
+"text": "16대 카메라로 취득한 다시점 데이터를 이더넷으로 전송해 수신 측에서 연속적으로 홀로그램을 기록/갱신하는 3D 텔레프레즌스를 시연했다.",
+"confidence": 0.8,
+"evidence": [
+{ "page": 3, "quote": "Our 3D telepresence set-up consists of 16 Firewire cameras", "why": "텔레프레즌스 입력(다시점 취득) 구성의 직접 근거." },
+{ "page": 3, "quote": "sent to the holographic recording controller through a 100 Mbit s−1 Ethernet link", "why": "원격 전송(이더넷) 기반 텔레프레즌스 파이프라인 근거." }
+]
+}
+],
+"claims": [
+{
+"text": "본 시스템은 ‘홀로그래픽 3D 텔레프레즌스’의 최초 시연이라고 주장한다.",
+"confidence": 0.65,
+"evidence": [
+{ "page": 2, "quote": "To the best of our knowledge this is the first demonstration of holographic 3D telepresence.", "why": "저자들이 ‘최초’임을 직접 주장(다만 검증은 외부 비교 필요)." }
+]
+},
+{
+"text": "펄스 기록 및 재료 특성 덕분에 산업 환경에서도 특별한 진동/온도 제어 없이 운용 가능하다고 주장한다.",
+"confidence": 0.6,
+"evidence": [
+{ "page": 2, "quote": "capable of operation in an industrial environment without any special need for vibration, noise or temperature control.", "why": "환경 강건성에 대한 직접 주장." }
+]
+},
+{
+"text": "RGB 읽기 기반의 풀컬러에 준하는 색 재현이 가능하며, 각 색 홀로그램의 회절 효율은 0.5%로 실내 조명에서도 관찰 가능하다고 주장한다.",
+"confidence": 0.7,
+"evidence": [
+{ "page": 2, "quote": "Up to three different holograms are written... (red–green–blue for full colour).", "why": "RGB 삼중 기록으로 풀컬러 지향을 명시." },
+{ "page": 3, "quote": "The diffraction efficiency for each hologram is 0.5%, which is large enough to be viewed under ambient light conditions.", "why": "가시성(효율 0.5%)과 실내 관찰 가능성 수치 근거." }
+]
+}
+],
+"limitations": [
+{
+"text": "풀 패럴랙스는 HPO 대비 hogel 수가 제곱으로 증가해 기록 시간이 크게 늘어나며, 단순 펄스 기록만으로는 수 분(>3분) 수준이 된다.",
+"status": "known",
+"evidence": [
+{ "page": 3, "quote": "HPO requires 100 hogels whereas full parallax requires 10,000 hogels.", "why": "풀 패럴랙스의 데이터/기록량 급증을 수치로 명시." },
+{ "page": 3, "quote": "the recording time becomes more than 3 min for full parallax.", "why": "풀 패럴랙스 기록 시간 병목을 직접 언급." }
+]
+},
+{
+"text": "홀로그램은 자연 감쇠로 몇 분 내 사라지며(지속 시간이 짧음), ‘영구 표시’가 아니라 ‘재기록/갱신’ 전제의 디스플레이다.",
+"status": "known",
+"evidence": [
+{ "page": 2, "quote": "The hologram fades away after a couple of minutes by natural dark decay", "why": "표시 지속 시간의 한계를 직접 서술." }
+]
+},
+{
+"text": "갱신 속도는 2초로 ‘준실시간’이며 전형적 비디오 레이트(수십 fps)에는 미달한다(특히 풀 패럴랙스는 추가 장치 없으면 더 느림).",
+"status": "known",
+"evidence": [
+{ "page": 1, "quote": "refresh images every two seconds.", "why": "갱신 주기가 2초임을 명시(해석상 비디오 레이트 미달)." },
+{ "page": 3, "quote": "recording time becomes more than 3 min for full parallax.", "why": "풀 패럴랙스에서 속도 문제가 더 심각함을 뒷받침." }
+]
+},
+{
+"text": "성능 지표(시야각, 해상도/MTF, 색 정확도, 밝기/효율의 조건별 변화, 장기 내구성)에 대한 체계적 벤치마크가 본문 4페이지 지면에서는 제한적으로만 제공된다.",
+"status": "unknown",
+"evidence": []
+}
+],
+"method_summary": "홀로그래픽 스테레오그래피(‘hogel’ 기반)로 3D 정보를 픽셀 단위가 아니라 ‘다시점 정보를 담은 hogel’ 단위로 기록한다. 6 ns, 50 Hz 펄스 레이저를 사용해 각 hogel을 단일 펄스로 광굴절 폴리머에 기록하고, 외부 전기장을 인가한 ITO-글라스 샌드위치 구조(두께 100 μm)에서 회절 격자를 자가형성(self-developing)시킨다. 멀티컬러는 각도 다중화로 서로 다른 각도의 홀로그램을 중첩 기록하고, 읽기는 서로 다른 LED(Bragg 각)로 수행한다. 풀 패럴랙스는 렌즈 어레이와 HOE를 결합해 1펄스에 100 hogel을 공간적으로 동시 기록한 뒤, 고속 스테이지로 래스터 스캔해 전체 면적을 채운다.",
+"experiments_summary": "단일 펄스 기록 후 회절 효율의 시간 응답(성장/감쇠)을 제시하고(Fig.1), 펄스 시스템으로 기록한 3D 홀로그램의 패럴랙스/가림을 사진으로 보여준다(Fig.2). 각도 다중화 기반 색 홀로그램 예시(Fig.3)와 공간 다중화 기반 풀 패럴랙스 다시점 사진(Fig.4)을 제시한다. 16대 카메라로 매초 다시점 이미지를 취득해 hogel 데이터로 처리한 뒤 100 Mbit/s 이더넷으로 전송하고 수신측에서 연속 기록/갱신하는 텔레프레즌스 데모를 시연한다(Fig.5).",
+"reproducibility": {
+"code_status": "unknown",
+"data_status": "unknown",
+"notes": "학술 레터 지면 특성상 광학 정렬/파라미터(빔 지오메트리, 노광 에너지 분포, 전기장 조건, 보정 절차)와 데이터/소프트웨어 공개 여부가 충분히 명시되지 않았다.",
+"evidence": []
+}
+},
+"personas": [
+{
+"id": "critic",
+"title": "Critic",
+"highlights": [
+{
+"point": "‘최초 시연’ 주장은 강하지만, 본문 내에서는 경쟁 시스템 대비 정량 비교/검증이 제한적이다.",
+"severity": "med",
+"evidence": [
+{ "page": 2, "quote": "this is the first demonstration of holographic 3D telepresence.", "why": "강한 우선순위 주장(검증은 외부 문헌 비교 필요)." }
+]
+},
+{
+"point": "갱신이 2초 주기라 ‘비디오 레이트’ 텔레프레즌스보다는 ‘준실시간’에 가깝고, 사용자 경험(프레임 연속성) 논의가 부족하다.",
+"severity": "med",
+"evidence": [
+{ "page": 1, "quote": "refresh images every two seconds.", "why": "업데이트 속도 상한을 직접 제시." }
+]
+},
+{
+"point": "시야각, 밝기(효율), 색 정확도 등 디스플레이 품질 메트릭이 사진 예시 중심이라 설계 트레이드오프를 평가하기 어렵다.",
+"severity": "med",
+"evidence": []
+}
+],
+"questions_to_ask": [
+{
+"q": "2초 갱신을 달성한 조건(레이저 에너지, 빔 크기/균일도, 전기장, 온도)에서의 품질(시야각·밝기·노이즈)의 정량 지표는 무엇인가?",
+"evidence": [
+{ "page": 2, "quote": "recording a 4 inch 3 4 inch sample in about 2 s", "why": "속도 수치는 있으나 품질 지표는 제한적." }
+]
+},
+{
+"q": "‘산업 환경’ 운용 주장을 뒷받침하는 구체적 진동/온도 허용범위(스펙) 실험이 있는가?",
+"evidence": [
+{ "page": 2, "quote": "operation in an industrial environment without any special need", "why": "강건성 주장은 있으나 허용범위 수치가 필요." }
+]
+},
+{
+"q": "텔레프레즌스에서 엔드-투-엔드 지연(캡처→처리→전송→기록→가시화)은 실제로 얼마이며 병목은 어디인가?",
+"evidence": [
+{ "page": 3, "quote": "take simultaneous pictures... every second.", "why": "입력 주기(1초)는 언급되나 총 지연은 불명." }
+]
+}
+]
+},
+{
+"id": "repro_police",
+"title": "ReproPolice",
+"highlights": [
+{
+"point": "재료 조성(중량비)과 샌드위치 구조는 제시되지만, 합성/가공 공정 상세(혼합 조건, 열처리, 전극 처리, 균일도 관리)가 제한적이다.",
+"severity": "med",
+"evidence": [
+{ "page": 2, "quote": "PATPD/CAAN:FDCST:ECZ:PCBM (49.5:30:20:0.5 wt%)", "why": "조성은 명확하나 공정 재현성 정보는 추가 필요." }
+]
+},
+{
+"point": "기록 광학계의 정렬·보정(Bragg 각, 각도 다중화 각도 설정, 크로스토크 억제) 세부 파라미터가 일부만 제시된다.",
+"severity": "med",
+"evidence": [
+{ "page": 2, "quote": "reference beam angles were set more than 10° apart", "why": "일부 각도 조건은 있으나 전체 정렬 절차는 부족." }
+]
+},
+{
+"point": "코드/데이터 공개 여부가 본문에 명시되지 않는다(특히 hogel 데이터 생성/처리 파이프라인).",
+"severity": "high",
+"evidence": []
+}
+],
+"questions_to_ask": [
+{
+"q": "hogel 생성 소프트웨어(카메라 캘리브레이션, 뷰 합성, 스캔 순서) 구현/의사코드 또는 공개 저장소가 있는가?",
+"evidence": [
+{ "page": 3, "quote": "processed into hogel data by the host computer", "why": "핵심 처리 단계가 블랙박스로 남아있음." }
+]
+},
+{
+"q": "펄스 에너지(샘플 위치), 빔 면적, 편광 조건, 전기장 인가 파형/안정도 등 실험 설정의 전체 파라미터 표를 제공할 수 있는가?",
+"evidence": [
+{ "page": 1, "quote": "pulsed energy... 650 mJ cm−2 ... Applied voltage ... 7 kV", "why": "일부 수치만 있어 전체 조건 재현이 어려움." }
+]
+},
+{
+"q": "장기 안정성(‘months’)의 정량 지표(효율 저하율, 브레이크다운 발생률, 반복 재기록 횟수 한계)는 무엇인가?",
+"evidence": [
+{ "page": 2, "quote": "samples used for months without any sign of degradation.", "why": "정성적 표현을 정량화할 필요." }
+]
+}
+]
+},
+{
+"id": "theory",
+"title": "Theory",
+"highlights": [
+{
+"point": "단일 나노초 펄스 후 수십 초에 걸친 격자 성장(photoconduction, charge trapping, molecular orientation)을 설명해 ‘펄스 기록 + 느린 현상’ 메커니즘의 개연성을 제공한다.",
+"severity": "low",
+"evidence": [
+{ "page": 2, "quote": "photoconduction, charge trapping, and molecular orientation", "why": "성장 지연의 물리 과정들을 명시." }
+]
+},
+{
+"point": "색 다중화에서 브래그 조건과 각도 분리(>10°)로 크로스토크를 줄이고, 파장 차이에 따른 각도 보정을 언급한다.",
+"severity": "low",
+"evidence": [
+{ "page": 2, "quote": "used Bragg’s law to determine the required 5° angle", "why": "파장 차 보상에 브래그 법칙을 사용." }
+]
+},
+{
+"point": "홀로그래픽 스테레오그래피는 위상 재현 대신 다시점/가림 단서를 재현하는 타협이며, 그 한계(진정한 파면 복원과의 차이) 논의는 제한적이다.",
+"severity": "med",
+"evidence": [
+{ "page": 1, "quote": "reproduce both parallax and occlusion clues (but not reproducing the phase)", "why": "기법의 근본적 가정/한계를 직접 언급." }
+]
+}
+],
+"questions_to_ask": [
+{
+"q": "스테레오그래피(위상 비재현)에서 깊이 정확도/초점 단서(vergence-accommodation conflict) 영향은 어떻게 평가했는가?",
+"evidence": [
+{ "page": 1, "quote": "but not reproducing the phase", "why": "위상 비재현이 시각 단서에 미치는 영향이 핵심." }
+]
+},
+{
+"q": "0.5% 회절 효율의 물리적 상한과(재료/전기장/노광) 트레이드오프 모델이 있는가?",
+"evidence": [
+{ "page": 3, "quote": "diffraction efficiency for each hologram is 0.5%", "why": "효율이 사용자 밝기에 직결되므로 이론적 해석 필요." }
+]
+},
+{
+"q": "각도/공간 다중화에서 크로스토크, 브래그 선택성, 공간 주파수 대역폭의 설계 제약을 정량화했는가?",
+"evidence": [
+{ "page": 2, "quote": "avoid crosstalk between the colours during readout", "why": "크로스토크 억제는 언급되나 정량 모델은 불명." }
+]
+}
+]
+},
+{
+"id": "experiments",
+"title": "Experiments",
+"highlights": [
+{
+"point": "기록 시간(4×4 inch를 ~2초)과 풀 패럴랙스 병목(>3분)을 수치로 제시해 속도 논지를 명확히 한다.",
+"severity": "low",
+"evidence": [
+{ "page": 2, "quote": "recording a 4 inch 3 4 inch sample in about 2 s", "why": "속도 주장에 직접 연결." },
+{ "page": 3, "quote": "recording time becomes more than 3 min for full parallax", "why": "풀 패럴랙스 확장성 한계 수치." }
+]
+},
+{
+"point": "사진/동영상(Supplementary) 기반 데모는 설득력 있지만, 반복 실험/통계/조건 스윕(에너지, 전기장, 주사 속도)에 대한 체계적 실험 설계는 제한적이다.",
+"severity": "med",
+"evidence": [
+{ "page": 2, "quote": "Supplementary Movie 1 shows the recording process", "why": "정성적 데모 중심임을 시사." }
+]
+},
+{
+"point": "텔레프레즌스는 네트워크 링크 사용률(<10%) 등 시스템 지표 일부가 제시되나, 전체 지연/프레임 드롭/품질 열화 분석은 부족하다.",
+"severity": "med",
+"evidence": [
+{ "page": 3, "quote": "used at less than 10% of its capacity.", "why": "전송 여유는 보여주나 E2E 성능 분석은 없음." }
+]
+}
+],
+"questions_to_ask": [
+{
+"q": "‘2초 기록’에서 hogel 수(120), 스캔 오버헤드, 실제 갱신 파이프라인(쓰기/읽기 동시)의 타이밍 다이어그램을 제공할 수 있는가?",
+"evidence": [
+{ "page": 3, "quote": "For a 4 inch 3 4 inch display, 120 hogels are processed", "why": "hogel 수는 있으나 타이밍 분해가 필요." }
+]
+},
+{
+"q": "풀 패럴랙스에서 100 hogel 동시 기록 시, 단일 hogel 기록 대비 효율/균일도/왜곡이 동일함을 정량 비교했는가?",
+"evidence": [
+{ "page": 3, "quote": "obtain equivalent diffraction efficiency.", "why": "동등 효율 주장에 대한 정량 검증 필요." }
+]
+},
+{
+"q": "주변 조명 조건에서 가시성 평가(조도 lx, 대비, 관측 거리) 실험을 수행했는가?",
+"evidence": [
+{ "page": 3, "quote": "viewed under ambient light conditions.", "why": "정성 표현을 정량 조건으로 구체화 필요." }
+]
+}
+]
+},
+{
+"id": "related_work",
+"title": "RelatedWork",
+"highlights": [
+{
+"point": "이전 업데이터블 3D 홀로그래픽 디스플레이(2008 Nature) 대비 갱신 속도를 ‘분→초’로 크게 개선하는 연속선상 기여다.",
+"severity": "low",
+"evidence": [
+{ "page": 4, "quote": "Tay, S. et al. An updatable holographic three-dimensional display. Nature 451, 694–698 (2008).", "why": "직접 인용된 핵심 선행연구." }
+]
+},
+{
+"point": "컴퓨터 생성 홀로그램(CGH)의 계산량 문제를 회피하기 위해 홀로그래픽 스테레오그래피(hogel) 접근을 택한 포지셔닝이 분명하다.",
+"severity": "low",
+"evidence": [
+{ "page": 1, "quote": "lack of sufficient computational power to produce realistic computer-generated holograms", "why": "CGH 한계를 문제정의로 제시." }
+]
+},
+{
+"point": "광굴절 결정 기반 리프레셔블 디스플레이의 확장성 한계를 폴리머로 해결하려는 맥락을 분명히 한다.",
+"severity": "low",
+"evidence": [
+{ "page": 1, "quote": "Photorefractive inorganic crystals... not scalable in size", "why": "대면적 스케일업 동기를 제공." }
+]
+}
+],
+"questions_to_ask": [
+{
+"q": "동시대(2009~2010) 실시간 컬러 3D 디스플레이(비홀로그래피 포함)와 비교해 시야각/밝기/해상도/지연에서 어디가 강점인가?",
+"evidence": [
+{ "page": 1, "quote": "demonstration of 3D televisions... technology used is based on polarization stereoscopy", "why": "비홀로그래피 3D 대비 포지셔닝이 본문에 존재." }
+]
+},
+{
+"q": "다른 동적 홀로그래피 접근(예: SLM 기반 전기홀로그래피) 대비 장단점을 정량 비교할 계획이 있는가?",
+"evidence": [
+{ "page": 1, "quote": "limited by either size or resolution", "why": "전자식 홀로그래피의 크기/해상도 트레이드오프 언급." }
+]
+},
+{
+"q": "후속 읽을거리로는 어떤 재료/광학계 개선(더 빠른 응답, 더 높은 효율, 더 큰 면적)이 핵심인가?",
+"evidence": [
+{ "page": 4, "quote": "we expect this development to lead to new applications", "why": "후속 발전/응용을 예고." }
+]
+}
+]
+}
+],
+"final_synthesis": {
+"one_liner": "나노초 펄스 레이저로 hogel을 단일 펄스 기록하는 대면적 광굴절 폴리머 홀로그래픽 스테레오그래피 디스플레이를 통해 2초 갱신의 준실시간 3D 홀로그램과 이더넷 기반 3D 텔레프레즌스를 시연한 논문.",
+"strengths": [
+"2초 갱신과 4×4 inch를 ~2초에 기록하는 명확한 속도 성과를 제시한다.",
+"펄스 기록으로 진동 민감도를 낮춰 실험실 밖 운용 가능성을 제시한다.",
+"각도 다중화(RGB)와 공간 다중화(100 hogel 동시 기록)로 색/풀 패럴랙스 확장을 보인다.",
+"다시점 캡처-전송-연속 기록의 텔레프레즌스 파이프라인을 실제로 구성해 데모한다."
+],
+"weaknesses": [
+"2초 갱신은 ‘비디오 레이트’라기보다 ‘준실시간’이며 사용자 경험/지연 분석이 부족하다.",
+"풀 패럴랙스는 hogel 수 급증으로 병목이 크고, 보조 광학계 없으면 기록이 수 분 단위다.",
+"디스플레이 품질 지표(시야각/밝기/색 정확도/해상도/노이즈)의 체계적 정량 평가가 제한적이다.",
+"재현성 측면에서 소프트웨어/데이터 및 광학 정렬·보정 세부가 충분히 공개되지 않았다."
+],
+"who_should_read": [
+"홀로그래픽(스테레오그래피 기반) 3D 디스플레이/텔레프레즌스 시스템을 설계하는 연구자",
+"광굴절 폴리머 재료로 동적 홀로그램 기록을 구현하려는 재료/광학 엔지니어",
+"다시점 캡처-전송-표시 파이프라인을 실시간 3D 시각화로 연결하려는 시스템 연구자",
+"풀 패럴랙스 확장을 위한 광학적 다중화(렌즈 어레이, HOE) 설계에 관심 있는 연구자"
+],
+"suggested_rating": { "overall": 4, "confidence": 0.7 },
+"evidence": [
+{ "page": 1, "quote": "refresh images every two seconds.", "why": "논문의 핵심 성과(준실시간 갱신 속도)를 직접 뒷받침." },
+{ "page": 3, "quote": "sent... through a 100 Mbit s−1 Ethernet link", "why": "텔레프레즌스(원격 전송-기록) 시연의 시스템 구성 근거." }
+]
+},
+"diagnostics": {
+"unknowns": [
+"코드/데이터 공개 여부 및 접근 경로(레터 본문에 명시 없음).",
+"텔레프레즌스 엔드-투-엔드 지연, 프레임 연속성/드롭률, 품질 열화에 대한 정량 평가.",
+"시야각, 밝기(조도 조건 포함), 색 정확도, 해상도 등의 표준화된 디스플레이 벤치마크.",
+"재료/소자 장기 내구성의 정량 지표(반복 재기록 사이클 한계, 효율 저하율)."
+],
+"notes": "근거는 업로드된 PDF()의 1~4페이지 본문/그림 캡션에서 발췌했다."
+}
+}

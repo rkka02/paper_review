@@ -3,19 +3,22 @@ from __future__ import annotations
 import hashlib
 import secrets
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import delete, desc, select
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import HTMLResponse
 from starlette.staticfiles import StaticFiles
 
+from paper_review.analysis_output import validate_analysis
 from paper_review.db import db_session, init_db
 from paper_review.drive import upload_drive_file
-from paper_review.models import AnalysisOutput, AnalysisRun, EvidenceSnippet, Paper, Review
+from paper_review.models import AnalysisOutput, AnalysisRun, EvidenceSnippet, Paper, PaperMetadata, Review
+from paper_review.render import render_markdown
 from paper_review.schemas import (
     AnalysisRunOut,
     PaperCreate,
@@ -31,6 +34,79 @@ app = FastAPI(title="paper-review", version="0.1.0")
 
 _UPLOAD_PREFIX = "upload:"
 _DOI_ONLY_PREFIX = "doi_only:"
+_IMPORT_JSON_PREFIX = "import_json:"
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _extract_evidence_rows(canonical: dict) -> list[dict]:
+    rows: list[dict] = []
+
+    def add_evidence(evs: list[dict] | None, source: str) -> None:
+        if not evs:
+            return
+        for ev in evs:
+            if not isinstance(ev, dict):
+                continue
+            rows.append(
+                {
+                    "page": ev.get("page"),
+                    "quote": ev.get("quote"),
+                    "why": ev.get("why"),
+                    "source": source,
+                }
+            )
+
+    normalized = canonical.get("normalized") or {}
+    for item in (normalized.get("contributions") or []):
+        add_evidence((item or {}).get("evidence"), "normalization")
+    for item in (normalized.get("claims") or []):
+        add_evidence((item or {}).get("evidence"), "normalization")
+    for item in (normalized.get("limitations") or []):
+        add_evidence((item or {}).get("evidence"), "normalization")
+    repro = normalized.get("reproducibility") or {}
+    add_evidence(repro.get("evidence"), "normalization")
+
+    for persona in (canonical.get("personas") or []):
+        for h in (persona or {}).get("highlights") or []:
+            add_evidence((h or {}).get("evidence"), "persona")
+        for q in (persona or {}).get("questions_to_ask") or []:
+            add_evidence((q or {}).get("evidence"), "persona")
+
+    final = canonical.get("final_synthesis") or {}
+    add_evidence(final.get("evidence"), "persona")
+
+    return rows
+
+
+def _upsert_metadata_from_analysis(db: Session, paper: Paper, canonical: dict) -> None:
+    paper_block = canonical.get("paper") or {}
+    meta = paper_block.get("metadata") or {}
+
+    row = paper.metadata_row
+    if row is None:
+        row = PaperMetadata(paper_id=paper.id)
+        db.add(row)
+        db.flush()
+        paper.metadata_row = row
+
+    row.authors = meta.get("authors")
+    row.year = meta.get("year")
+    row.venue = meta.get("venue")
+    row.url = meta.get("url")
+    row.source = "import_json"
+
+    if meta.get("title") and not paper.title:
+        paper.title = meta.get("title")
+    if meta.get("doi") and not paper.doi:
+        paper.doi = meta.get("doi")
+    if paper_block.get("abstract") and not paper.abstract:
+        paper.abstract = paper_block.get("abstract")
+
+    db.add(row)
+    db.add(paper)
 
 if settings.web_auth_enabled and not settings.session_secret:
     raise RuntimeError("SESSION_SECRET must be set when WEB_USERNAME/WEB_PASSWORD are set.")
@@ -153,6 +229,102 @@ def create_paper(payload: PaperCreate, db: Session = Depends(get_db)) -> PaperOu
         status="to_read",
     )
     db.add(paper)
+    db.flush()
+    db.refresh(paper)
+    return PaperOut.model_validate(paper, from_attributes=True)
+
+
+@app.post("/api/papers/import-json", response_model=PaperOut, dependencies=[Depends(_require_auth)])
+async def import_paper_from_json(
+    request: Request,
+    drive_file_id: str | None = Query(default=None),
+    doi: str | None = Query(default=None),
+    title: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> PaperOut:
+    try:
+        payload = await request.json()
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"Body must be valid JSON: {e}")
+
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="JSON must be an object.")
+
+    try:
+        parsed = validate_analysis(payload)
+    except ValidationError as e:
+        errors = e.errors()
+        parts: list[str] = []
+        for err in errors[:10]:
+            loc = ".".join([str(x) for x in (err.get("loc") or [])])
+            msg = err.get("msg") or "invalid"
+            parts.append(f"{loc}: {msg}" if loc else msg)
+        suffix = "" if len(errors) <= 10 else f" (+{len(errors) - 10} more)"
+        raise HTTPException(status_code=400, detail=f"Schema validation failed: {'; '.join(parts)}{suffix}")
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"Schema validation failed: {e}")
+
+    canonical = parsed.model_dump()
+    paper_id = uuid.uuid4()
+
+    drive_file_id = (drive_file_id or "").strip() or None
+    doi = (doi or "").strip() or None
+    title = (title or "").strip() or None
+
+    paper_block = canonical.get("paper") or {}
+    meta = paper_block.get("metadata") or {}
+    meta_doi = (meta.get("doi") or "").strip() or None
+    meta_title = (meta.get("title") or "").strip() or None
+    doi = doi or meta_doi
+    title = title or meta_title
+
+    if not drive_file_id:
+        drive_file_id = f"{_IMPORT_JSON_PREFIX}{paper_id}"
+
+    paper = Paper(
+        id=paper_id,
+        drive_file_id=drive_file_id,
+        doi=doi,
+        title=title,
+        abstract=paper_block.get("abstract"),
+        tags=[],
+        status="to_read",
+    )
+    db.add(paper)
+    db.flush()
+    db.refresh(paper)
+
+    now = _utcnow()
+    run = AnalysisRun(
+        paper_id=paper.id,
+        stage="import_json",
+        status="succeeded",
+        error=None,
+        started_at=now,
+        finished_at=now,
+        timings={"import_json": True},
+    )
+    db.add(run)
+    db.flush()
+    db.refresh(run)
+
+    content_md = render_markdown(canonical)
+    out = AnalysisOutput(analysis_run_id=run.id, canonical_json=canonical, content_md=content_md)
+    db.add(out)
+
+    for ev in _extract_evidence_rows(canonical):
+        db.add(
+            EvidenceSnippet(
+                paper_id=paper.id,
+                analysis_run_id=run.id,
+                page=ev.get("page"),
+                quote=ev.get("quote"),
+                why=ev.get("why"),
+                source=ev.get("source"),
+            )
+        )
+
+    _upsert_metadata_from_analysis(db, paper, canonical)
     db.flush()
     db.refresh(paper)
     return PaperOut.model_validate(paper, from_attributes=True)
@@ -357,6 +529,78 @@ def update_paper(paper_id: uuid.UUID, payload: PaperUpdate, db: Session = Depend
     db.flush()
     db.refresh(paper)
     return PaperOut.model_validate(paper, from_attributes=True)
+
+
+@app.post(
+    "/api/papers/{paper_id}/import-json",
+    response_model=AnalysisRunOut,
+    dependencies=[Depends(_require_auth)],
+)
+async def import_analysis_json(
+    paper_id: uuid.UUID, request: Request, db: Session = Depends(get_db)
+) -> AnalysisRunOut:
+    paper = db.get(Paper, paper_id)
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+
+    try:
+        payload = await request.json()
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"Body must be valid JSON: {e}")
+
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="JSON must be an object.")
+
+    try:
+        parsed = validate_analysis(payload)
+    except ValidationError as e:
+        errors = e.errors()
+        parts: list[str] = []
+        for err in errors[:10]:
+            loc = ".".join([str(x) for x in (err.get("loc") or [])])
+            msg = err.get("msg") or "invalid"
+            parts.append(f"{loc}: {msg}" if loc else msg)
+        suffix = "" if len(errors) <= 10 else f" (+{len(errors) - 10} more)"
+        raise HTTPException(status_code=400, detail=f"Schema validation failed: {'; '.join(parts)}{suffix}")
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"Schema validation failed: {e}")
+
+    canonical = parsed.model_dump()
+    content_md = render_markdown(canonical)
+
+    now = _utcnow()
+    run = AnalysisRun(
+        paper_id=paper.id,
+        stage="import_json",
+        status="succeeded",
+        error=None,
+        started_at=now,
+        finished_at=now,
+        timings={"import_json": True},
+    )
+    db.add(run)
+    db.flush()
+    db.refresh(run)
+
+    out = AnalysisOutput(analysis_run_id=run.id, canonical_json=canonical, content_md=content_md)
+    db.add(out)
+
+    for ev in _extract_evidence_rows(canonical):
+        db.add(
+            EvidenceSnippet(
+                paper_id=paper.id,
+                analysis_run_id=run.id,
+                page=ev.get("page"),
+                quote=ev.get("quote"),
+                why=ev.get("why"),
+                source=ev.get("source"),
+            )
+        )
+
+    _upsert_metadata_from_analysis(db, paper, canonical)
+    db.flush()
+    db.refresh(run)
+    return AnalysisRunOut.model_validate(run, from_attributes=True)
 
 
 @app.delete("/api/papers/{paper_id}", response_model=dict, dependencies=[Depends(_require_auth)])

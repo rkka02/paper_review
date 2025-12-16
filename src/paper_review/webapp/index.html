@@ -60,11 +60,19 @@
               <input id="title" type="text" placeholder="paper title..." />
             </label>
 
+            <label class="field">
+              <span class="label">Analysis JSON upload (optional)</span>
+              <input id="analysisJsonFile" type="file" accept="application/json,.json" />
+              <span class="hint">
+                ChatGPT 웹에서 받은 분석 JSON을 업로드하면, API analyze 없이 바로 결과를 등록해요.
+              </span>
+            </label>
+
             <div class="row">
               <button id="createBtn" class="btn btn-primary" type="button">Create</button>
               <span id="createStatus" class="muted"></span>
             </div>
-            <p class="muted small">최소 하나는 필요: PDF 업로드 / Drive file id / DOI</p>
+            <p class="muted small">최소 하나는 필요: PDF 업로드 / Drive file id / DOI / Analysis JSON</p>
           </div>
 
           <div class="card">
@@ -81,6 +89,9 @@
             <h2 class="h2">Details</h2>
             <div class="row">
               <button id="analyzeBtn" class="btn btn-primary" type="button" disabled>Analyze</button>
+              <button id="importJsonBtn" class="btn btn-secondary" type="button" disabled>
+                Import JSON
+              </button>
               <button id="stopPollBtn" class="btn btn-secondary hidden" type="button">
                 Stop polling
               </button>
@@ -89,6 +100,8 @@
 
           <div id="detailMeta" class="muted"></div>
           <div id="detailError" class="error"></div>
+          <input id="importJsonFile" class="hidden" type="file" accept="application/json,.json" />
+          <div id="importJsonStatus" class="muted"></div>
 
           <div id="detailTabs" class="tabs" data-tabs="details">
             <button class="tab active" type="button" data-tab="overview">Overview</button>
