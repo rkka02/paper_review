@@ -339,6 +339,7 @@ html[data-theme="dark"] .hint {
 
 .accordion {
   margin-top: 10px;
+  margin-bottom: 12px; /* ✅ 이거 추가 */
   border: 1px solid var(--border);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.76);
