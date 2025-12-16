@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>paper_review</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">paper_review</div>
+      <div class="spacer"></div>
+      <button id="logoutBtn" class="btn btn-secondary hidden" type="button">Logout</button>
+    </header>
+
+    <main class="container">
+      <section id="loginSection" class="card hidden">
+        <h1 class="h1">Sign in</h1>
+        <p class="muted">내 개인용 paper review 대시보드</p>
+        <div class="grid-2">
+          <label class="field">
+            <span class="label">Username</span>
+            <input id="username" type="text" autocomplete="username" />
+          </label>
+          <label class="field">
+            <span class="label">Password</span>
+            <input id="password" type="password" autocomplete="current-password" />
+          </label>
+        </div>
+        <div class="row">
+          <button id="loginBtn" class="btn btn-primary" type="button">Login</button>
+          <span id="loginError" class="error"></span>
+        </div>
+      </section>
+
+      <section id="appSection" class="hidden">
+        <section class="grid">
+          <div class="card">
+            <h2 class="h2">New paper</h2>
+
+            <label class="field">
+              <span class="label">PDF upload (optional)</span>
+              <input id="pdfFile" type="file" accept="application/pdf" />
+              <span class="hint">로컬 PDF를 바로 업로드해서 테스트할 수 있어요.</span>
+            </label>
+
+            <label class="field">
+              <span class="label">Google Drive file id (optional)</span>
+              <input id="driveFileId" type="text" placeholder="1ALi..." />
+              <span class="hint">Drive에 이미 있는 PDF면 file id만 넣어도 됩니다.</span>
+            </label>
+
+            <label class="field">
+              <span class="label">DOI (optional)</span>
+              <input id="doi" type="text" placeholder="10.1145/..." />
+            </label>
+
+            <label class="field">
+              <span class="label">Title (optional)</span>
+              <input id="title" type="text" placeholder="paper title..." />
+            </label>
+
+            <div class="row">
+              <button id="createBtn" class="btn btn-primary" type="button">Create</button>
+              <span id="createStatus" class="muted"></span>
+            </div>
+            <p class="muted small">최소 하나는 필요: PDF 업로드 / Drive file id / DOI</p>
+          </div>
+
+          <div class="card">
+            <div class="row space-between">
+              <h2 class="h2">Papers</h2>
+              <button id="refreshBtn" class="btn btn-secondary" type="button">Refresh</button>
+            </div>
+            <div id="papersList" class="list"></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="row space-between">
+            <h2 class="h2">Details</h2>
+            <div class="row">
+              <button id="analyzeBtn" class="btn btn-primary" type="button" disabled>Analyze</button>
+              <button id="stopPollBtn" class="btn btn-secondary hidden" type="button">
+                Stop polling
+              </button>
+            </div>
+          </div>
+
+          <div id="detailMeta" class="muted"></div>
+          <div id="detailError" class="error"></div>
+
+          <div class="tabs">
+            <button class="tab active" type="button" data-tab="md">Markdown</button>
+            <button class="tab" type="button" data-tab="json">JSON</button>
+          </div>
+          <pre id="mdView" class="pre"></pre>
+          <pre id="jsonView" class="pre hidden"></pre>
+        </section>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
+

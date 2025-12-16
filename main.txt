@@ -1,0 +1,556 @@
+개인용 논문 리뷰 시스템 설계서 (Drive 저장 + DOI 메타데이터 + OpenAI 단일 세션 멀티‑페르소나 분석)
+
+목적: CODEX가 이 문서만 보고 바로 구현/분석에 착수할 수 있도록, 기존 문서의 큰 흐름을 유지하되 **“OpenAI에서 한 번의 세션(단일 Responses 호출)으로 멀티‑페르소나 분석”**으로 정제한 구현 지침서.
+
+0) 한 줄 요약
+
+웹앱에서 PDF(+DOI) 입력 → Google Drive에 PDF 업로드/보관 + 메타데이터 추출/저장 → OpenAI Responses API에 PDF를 입력 → 단일 세션에서 멀티‑페르소나(멀티 에이전트 역할) 분석 결과를 구조화(JSON)로 받아 DB에 저장 → (옵션) 유사 논문/추천 + Zotero/Obsidian 연동. 
+
+motivation
+
+1) 목표와 MVP 범위
+1.1 최종 목표 (Product Goal)
+
+사용자가 논문 PDF 업로드(또는 DOI 입력)하면,
+
+여러 “역할/캐릭터” 관점의 리뷰 코멘트가 자동 생성되고 
+
+motivation
+
+아이폰/맥/랩에서 라이브러리/리뷰/코멘트를 조회·수정 가능 
+
+motivation
+
+Zotero 메타데이터/Obsidian 노트로 연동 가능 
+
+motivation
+
+1.2 MVP (반드시)
+
+PDF 업로드 → 분석 요청 → 결과 저장 
+
+motivation
+
+논문 목록/검색/필터(태그, 별점, 상태) 
+
+motivation
+
+내 리뷰 템플릿(요약/한줄평/장단점/별점)
+
+“페르소나별 코멘트” 탭/패널 
+
+motivation
+
+1.3 확장(2차)
+
+Connected Papers 느낌 그래프 뷰, 취향 기반 강화, 멀티유저(랩) 등 
+
+motivation
+
+2) 핵심 결정사항 (이번 정제의 포인트)
+2.1 저장/업로드
+
+PDF 원본은 Google Drive에 업로드/장기 보관(“나중에 PDF 열람” 목적). 
+
+main
+
+프론트가 Drive로 Resumable Upload 후, drive_file_id, sha256, size_bytes 등을 백엔드에 전달해 paper 레코드 생성. 
+
+main
+
+2.2 메타데이터 추출/저장
+
+입력: (a) DOI, (b) PDF, (c) 둘 다.
+
+우선순위:
+
+DOI가 있으면 DOI 기반 메타데이터를 외부에서 보강(추천: Semantic Scholar) 
+
+main
+
+부족하면 OpenAI 분석 결과에서 메타데이터/섹션맵/그림·표 캡션 등 추출(아래 “정규화” 파트 참고). 
+
+main
+
+2.3 OpenAI 분석 방식 (중요 변경)
+
+기존 “멀티 에이전트(여러 번 호출)” 대신,
+
+PDF를 OpenAI에 한 번 입력하고, 단일 Responses 세션(= 단일 호출) 안에서 멀티‑페르소나를 프롬프트로 제어하여 여러 관점 분석을 한 번에 산출한다.
+
+결과는 **Structured Outputs(JSON Schema, strict)**로 강제하여 저장/후처리를 안정화한다. 
+
+main
+
+2.4 근거(evidence) 강제
+
+모든 핵심 주장/기여/한계/리뷰 포인트는 페이지 번호 + 짧은 인용 + 근거 설명을 필수로 포함. 
+
+main
+
+근거가 부족하면 unknown 또는 낮은 confidence로 처리(단정 금지). 
+
+main
+
+2.5 파일 보관/삭제 정책
+
+OpenAI Files는 분석에만 사용하고, 기본값은 **분석 완료 시 삭제(또는 expires_after)**로 보수 운영. 
+
+motivation
+
+(문서에 있던 주의) 파일 입력은 안전 스캔/드문 수동 검토 가능성이 있으므로 “완전 0 저장” 같은 문구는 피한다. 
+
+motivation
+
+3) End-to-End 플로우 (사용자 관점)
+3.1 웹 입력
+
+사용자가 웹페이지에서:
+
+PDF 업로드(필수에 가깝지만, DOI-only도 허용)
+
+DOI 입력(선택, 있으면 강력 추천)
+
+3.2 Drive 업로드 & paper 레코드 생성
+
+Google OAuth 로그인
+
+프론트가 Drive로 Resumable Upload
+
+업로드 완료 후 백엔드에:
+
+drive_file_id, sha256, size_bytes, doi(optional) 전송 → DB에 papers 생성 
+
+main
+
+3.3 메타데이터 추출/저장
+
+DOI가 있으면 우선 외부 메타데이터 보강(예: Semantic Scholar Graph API)
+
+결과를 paper_metadata(또는 papers 컬럼)에 저장
+
+3.4 OpenAI 단일 세션 멀티‑페르소나 분석
+
+Worker가 Drive에서 PDF를 다운로드(files.get alt=media 방식) 
+
+main
+
+OpenAI Files에 업로드(purpose user_data) 
+
+main
+
+Responses API 호출(입력: PDF + DOI/메타데이터 + 페르소나 지시 프롬프트)
+
+응답(JSON)을 DB에 저장
+
+OpenAI file 삭제/만료(기본 true) 
+
+main
+
+3.5 (옵션) 유사논문/추천
+
+내부 유사도 검색: PDF 전체 훑기 금지, 내 리뷰+abstract+메타데이터+태그 중심 임베딩 
+
+main
+
+외부 추천: Semantic Scholar 기반 추천 
+
+main
+
+4) 시스템 구성요소 (구현 단위)
+Frontend
+
+로그인/업로드 UI
+
+Drive Resumable Upload
+
+DOI 입력
+
+분석 상태/결과 뷰(페르소나 탭)
+
+Backend API
+
+인증(Supabase Auth 등)
+
+paper 생성/조회/검색/태깅/리뷰 CRUD
+
+분석 Job enqueue
+
+(옵션) DOI 메타데이터 fetch 프록시(키 관리)
+
+Worker (Queue 소비자)
+
+Drive → PDF 다운로드
+
+OpenAI Files 업로드
+
+Responses 호출(단일 세션 멀티‑페르소나)
+
+스키마 검증/재시도
+
+DB 저장
+
+OpenAI 파일 삭제
+
+DB (Postgres/Supabase)
+
+paper/metadata/review/analysis 결과 저장
+
+(옵션) pgvector로 임베딩 저장
+
+5) 데이터 모델 (최소 구현 스키마)
+
+아래는 “CODEX가 바로 테이블 만들 수 있게” 최소 필드만 적는다. (확장은 자유)
+
+5.1 papers
+
+id (uuid)
+
+user_id
+
+title (nullable)
+
+doi (nullable)
+
+drive_file_id (required) 
+
+main
+
+pdf_sha256, pdf_size_bytes 
+
+main
+
+abstract (nullable; 외부/분석 결과로 채움) 
+
+main
+
+status (to_read/reading/done)
+
+timestamps
+
+5.2 paper_metadata (또는 papers에 합쳐도 됨)
+
+paper_id
+
+authors (jsonb)
+
+year, venue, url
+
+source (doi/semantic_scholar/openai/pdf_guess 등)
+
+timestamps
+
+5.3 analysis_runs
+
+id
+
+paper_id
+
+stage (single_session_review) ← 이번 정제안에서는 1개 스테이지로 충분
+
+openai_file_id (nullable; 삭제 정책이면 저장해도 무방)
+
+status (queued/running/succeeded/failed)
+
+error
+
+timings
+
+기존 문서의 agent_runs 개념을 유지하되, “멀티 에이전트 = 단일 세션 내 멀티 페르소나”로 축소 적용. (테이블 이름은 그대로 써도 되고, analysis_runs로 단순화해도 됨) 
+
+main
+
+5.4 analysis_outputs
+
+analysis_run_id
+
+canonical_json (jsonb) ← 아래 “출력 스키마” 그대로 저장
+
+content_md (선택: 프론트 렌더용 합본)
+
+timestamps
+
+5.5 evidence_snippets (선택이지만 강력 추천)
+
+paper_id
+
+analysis_run_id
+
+page int
+
+quote text (200자 이하 권장) 
+
+main
+
+why text
+
+source enum(normalization|persona) (여기서는 persona 포함)
+
+timestamps 
+
+main
+
+5.6 reviews (내가 쓰는 리뷰)
+
+paper_id
+
+one_liner, summary, pros, cons
+
+rating_overall 등
+
+5.7 (옵션) paper_profile_embeddings
+
+paper_id
+
+embedding
+
+embedding_text (title+abstract+review+tags 등)
+
+내부 유사도 검색은 PDF 금지 원칙 유지 
+
+main
+
+6) Worker 파이프라인 (단일 세션 멀티‑페르소나)
+6.1 Job: analyze_paper_single_session(paper_id)
+
+DB에서 paper 로드(drive_file_id, doi, 기존 metadata 등)
+
+Drive에서 PDF 다운로드(스트리밍) 
+
+main
+
+OpenAI Files 업로드(purpose user_data) 
+
+main
+
+Responses API 호출:
+
+input: {file_id: <openai_file_id>} + DOI/메타데이터 + “멀티‑페르소나 지시 프롬프트”
+
+text.format = json_schema, strict: true로 출력 강제 
+
+main
+
+서버에서 스키마 검증(zod/pydantic 등)
+
+실패 시: “불일치/누락 키 목록”을 넣어 재시도(2~3회) 
+
+main
+
+DB 저장(analysis_outputs.canonical_json, evidence 분리 저장 옵션)
+
+OpenAI 파일 삭제/만료 
+
+motivation
+
+7) OpenAI 단일 세션 멀티‑페르소나 설계
+7.1 페르소나(역할) 세트
+
+기본 페르소나(예시):
+
+Critic(비판/한계)
+
+ReproPolice(재현성)
+
+Theory(가정/정당화)
+
+Experiments(실험/베이스라인)
+
+RelatedWork(관련연구/추천) 
+
+main
+
+중요: 구현은 “N개의 에이전트 프로세스”가 아니라, 프롬프트에서 역할을 순차 실행하게 만든다. 결과는 JSON 안에 persona 섹션들로 분리 저장.
+
+7.2 “정규화 + 페르소나 분석”을 한 번에
+
+기존 문서에서 강조한 “정규화(논문 구조/섹션/그림표/핵심 주장 등) 결과를 단단히 만든다”는 원칙은 유지하되 
+
+main
+
+,
+이번 정제안에서는 이를 같은 Responses 호출 안에서 첫 파트로 수행시키고, 이어서 페르소나들이 그 정규화 결과를 참조해 코멘트를 작성하도록 한다.
+
+7.3 Evidence 규칙(강제)
+
+claim/contribution/limitation/각 페르소나 코멘트의 핵심 포인트에는 evidence 필수:
+
+page
+
+quote(짧게)
+
+why 
+
+main
+
+근거가 없으면 unknown 처리(단정 금지) 
+
+main
+
+8) 출력(JSON) 스키마 (CODEX 바로 구현용)
+
+아래는 “단일 Responses 호출 결과”를 그대로 저장/렌더링하기 위한 최소 스키마 초안.
+(원하면 Zod 버전으로도 바로 바꿀 수 있는 형태)
+
+8.1 Top-level
+{
+  "paper": {
+    "metadata": {
+      "title": "string|null",
+      "authors": [{"name":"string","affiliation":"string|null"}],
+      "year": "number|null",
+      "venue": "string|null",
+      "doi": "string|null",
+      "url": "string|null"
+    },
+    "abstract": "string|null"
+  },
+  "normalized": {
+    "section_map": [
+      {"name":"string","page_start": 1, "page_end": 3, "summary":"string"}
+    ],
+    "figures": [{"id":"string","page": 7, "caption":"string", "why_important":"string"}],
+    "tables": [{"id":"string","page": 8, "caption":"string", "why_important":"string"}],
+
+    "contributions": [
+      {"text":"string","confidence":0.0, "evidence":[{"page":7,"quote":"string","why":"string"}]}
+    ],
+    "claims": [
+      {"text":"string","confidence":0.0, "evidence":[{"page":7,"quote":"string","why":"string"}]}
+    ],
+    "limitations": [
+      {"text":"string","status":"known|unknown","evidence":[{"page":7,"quote":"string","why":"string"}]}
+    ],
+    "method_summary": "string",
+    "experiments_summary": "string",
+    "reproducibility": {
+      "code_status":"available|unavailable|unknown",
+      "data_status":"available|unavailable|unknown",
+      "notes":"string",
+      "evidence":[{"page":7,"quote":"string","why":"string"}]
+    }
+  },
+  "personas": [
+    {
+      "id":"critic",
+      "title":"Critic",
+      "highlights":[
+        {"point":"string","severity":"low|med|high","evidence":[{"page":7,"quote":"string","why":"string"}]}
+      ],
+      "questions_to_ask":[
+        {"q":"string","evidence":[{"page":7,"quote":"string","why":"string"}]}
+      ]
+    }
+  ],
+  "final_synthesis": {
+    "one_liner": "string",
+    "strengths": ["string"],
+    "weaknesses": ["string"],
+    "who_should_read": ["string"],
+    "suggested_rating": {"overall": 0, "confidence": 0.0},
+    "evidence":[{"page":7,"quote":"string","why":"string"}]
+  },
+  "diagnostics": {
+    "unknowns": ["string"],
+    "notes": "string"
+  }
+}
+
+
+스키마의 핵심은:
+
+normalized + personas + final_synthesis를 한 번에 받는다.
+
+모든 핵심 요약/판단에 evidence 배열을 강제한다. 
+
+main
+
+9) 대용량/예외 처리
+9.1 PDF 50MB 제한 대응
+
+문서에 적어둔 제한/대응 방식을 그대로 정책화:
+
+업로드 단계에서 size_bytes 체크
+
+초과 시:
+
+(A) 텍스트 추출 후 텍스트만 분석(도표/그림 손실 감수)
+
+(B) PDF 분할 후 파트별 처리 → 병합 
+
+main
+
+9.2 DOI-only 케이스
+
+PDF 없이 DOI만 있을 때는:
+
+메타데이터/초록/인용을 외부에서 채우고,
+
+“PDF 기반 근거(evidence page/quote)”는 불가하므로 unknown 처리하는 별도 스키마 분기(또는 evidence 비어있음 허용).
+
+10) 유사 논문/추천(옵션, 하지만 구조는 미리 깔아두기)
+10.1 내부 유사도 검색 (내 라이브러리)
+
+embedding 텍스트 구성 예: title + abstract + 내 최종 리뷰 + 태그 + (선택) contributions 한 줄 요약 
+
+main
+
+pgvector에 저장하고 Top‑K 반환 
+
+main
+
+10.2 외부 추천 (Semantic Scholar 위주)
+
+DOI 매칭 → Graph API로 메타/초록 보강
+
+Recommendations API로 seed 기반 추천 
+
+main
+
+11) Zotero / Obsidian 연동 (MVP 이후 빠르게 붙이기)
+
+Zotero: BibTeX/Better BibTeX export 업로드로 최소 메타 import 
+
+motivation
+
+Obsidian: md + YAML frontmatter로 노트 생성/갱신 
+
+motivation
+
+12) CODEX 작업 시작 체크리스트 (바로 구현 순서)
+
+DB 마이그레이션:
+
+papers, paper_metadata, analysis_runs, analysis_outputs, (옵션)evidence_snippets
+
+프론트:
+
+Google OAuth + Drive Resumable Upload
+
+DOI 입력 + 업로드 완료 콜백
+
+백엔드:
+
+POST /papers (doi, drive_file_id, size, sha)
+
+POST /papers/:id/analyze (job enqueue)
+
+GET /papers/:id (상태 + 결과)
+
+워커:
+
+Drive download → OpenAI file upload → Responses 단일 호출 → strict 스키마 파싱/재시도 
+
+main
+
+저장 + OpenAI file delete/expires 
+
+motivation
+
+프롬프트/스키마:
+
+위 JSON 구조로 strict output 고정
+
+evidence 규칙 위반 시 unknown 처리 강제 
+
+main
