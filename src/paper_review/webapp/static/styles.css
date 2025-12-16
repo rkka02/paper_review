@@ -174,6 +174,23 @@ a {
   background: rgba(231, 236, 255, 0.04);
 }
 
+.btn-small {
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.btn-danger {
+  border-color: rgba(255, 106, 106, 0.35);
+  color: #ffbaba;
+  background: rgba(255, 106, 106, 0.08);
+}
+
+.btn-danger:hover {
+  border-color: rgba(255, 106, 106, 0.55);
+  background: rgba(255, 106, 106, 0.12);
+}
+
 .field {
   display: grid;
   gap: 6px;
@@ -274,4 +291,3 @@ input[type="file"] {
   border-color: rgba(106, 166, 255, 0.55);
   background: rgba(106, 166, 255, 0.14);
 }
-

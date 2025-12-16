@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel
-from sqlalchemy import desc, select
+from sqlalchemy import delete, desc, select
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import HTMLResponse
@@ -15,7 +15,7 @@ from starlette.staticfiles import StaticFiles
 
 from paper_review.db import db_session, init_db
 from paper_review.drive import upload_drive_file
-from paper_review.models import AnalysisRun, AnalysisOutput, Paper, Review
+from paper_review.models import AnalysisOutput, AnalysisRun, EvidenceSnippet, Paper, Review
 from paper_review.schemas import (
     AnalysisRunOut,
     PaperCreate,
@@ -357,6 +357,26 @@ def update_paper(paper_id: uuid.UUID, payload: PaperUpdate, db: Session = Depend
     db.flush()
     db.refresh(paper)
     return PaperOut.model_validate(paper, from_attributes=True)
+
+
+@app.delete("/api/papers/{paper_id}", response_model=dict, dependencies=[Depends(_require_auth)])
+def delete_paper(paper_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+    paper = db.get(Paper, paper_id)
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+
+    db.execute(delete(EvidenceSnippet).where(EvidenceSnippet.paper_id == paper_id))
+    db.delete(paper)
+    db.flush()
+
+    if paper.drive_file_id.startswith(_UPLOAD_PREFIX):
+        try:
+            (settings.upload_dir / f"{paper_id}.pdf").unlink(missing_ok=True)
+            (settings.upload_dir / f"{paper_id}.pdf.part").unlink(missing_ok=True)
+        except Exception:  # noqa: BLE001
+            pass
+
+    return {"ok": True}
 
 
 @app.post(

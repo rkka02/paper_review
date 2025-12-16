@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import typer
@@ -24,7 +25,7 @@ def main(
     host: str = typer.Option("localhost", help="Local redirect host."),
     scope: str = typer.Option(
         "drive",
-        help="OAuth scope preset: drive.readonly (download) or drive (upload+download).",
+        help="OAuth scope preset: drive (upload+download) or drive.readonly (download only).",
     ),
 ) -> None:
     """
@@ -40,14 +41,18 @@ def main(
     scope_uri = _SCOPE_PRESETS.get(scope, scope)
     scopes = [scope_uri]
 
+    # Google sometimes returns a scope string that differs in order / includes implied scopes.
+    # oauthlib treats that as an exception unless relaxed.
+    os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
+
     redirect_uri = f"http://{host}:{port}/"
     print(f"OAuth client type: {client_type}")
     print(f"Redirect URI: {redirect_uri}")
     print(f"Scope: {scope_uri}")
     if client_type == "web":
         print(
-            "If you see redirect_uri_mismatch: Google Cloud Console → Credentials → "
-            "this OAuth client → Authorized redirect URIs → add the exact URI above."
+            "If you see redirect_uri_mismatch: Google Cloud Console -> Credentials -> "
+            "this OAuth client -> Authorized redirect URIs -> add the exact URI above."
         )
 
     flow = InstalledAppFlow.from_client_secrets_file(str(path), scopes=scopes)
@@ -58,7 +63,12 @@ def main(
         prompt="consent",
         include_granted_scopes="true",
     )
-    print(json.dumps({"refresh_token": creds.refresh_token}, ensure_ascii=False, indent=2))
+    if not creds.refresh_token:
+        print(
+            "refresh_token was not returned. If you previously authorized this client, revoke the app "
+            "in your Google Account (Security -> Third-party access) and retry."
+        )
+    print(json.dumps({"refresh_token": creds.refresh_token}, ensure_ascii=False, indent=2), flush=True)
 
 
 if __name__ == "__main__":

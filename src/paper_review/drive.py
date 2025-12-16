@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import httpx
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2 import credentials as oauth_credentials
 from google.oauth2 import service_account
@@ -19,7 +20,13 @@ def _get_drive_access_token() -> str:
         creds = service_account.Credentials.from_service_account_file(
             settings.google_service_account_file, scopes=[scope]
         )
-        creds.refresh(Request())
+        try:
+            creds.refresh(Request())
+        except RefreshError as e:
+            raise RuntimeError(
+                f"Failed to mint Google access token (service account): {e}. "
+                "Check GOOGLE_SERVICE_ACCOUNT_FILE and GOOGLE_DRIVE_SCOPE."
+            ) from e
         if not creds.token:
             raise RuntimeError("Failed to mint Google access token (service account).")
         return creds.token
@@ -33,7 +40,18 @@ def _get_drive_access_token() -> str:
             client_secret=settings.google_client_secret,
             scopes=[scope],
         )
-        creds.refresh(Request())
+        try:
+            creds.refresh(Request())
+        except RefreshError as e:
+            msg = str(e)
+            if "invalid_scope" in msg:
+                raise RuntimeError(
+                    f"Google token refresh failed: {e}. "
+                    "This usually means GOOGLE_DRIVE_SCOPE does not match the scope used to mint "
+                    "GOOGLE_REFRESH_TOKEN. Re-issue the refresh token with the same scope "
+                    "(recommended for upload+download: https://www.googleapis.com/auth/drive)."
+                ) from e
+            raise RuntimeError(f"Google token refresh failed: {e}.") from e
         if not creds.token:
             raise RuntimeError("Failed to refresh Google access token (OAuth).")
         return creds.token

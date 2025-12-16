@@ -73,6 +73,35 @@ function runBadgeText(run) {
   return `run: ${run.status}`;
 }
 
+async function renamePaper(paper) {
+  const current = paper.title || "";
+  const value = prompt("Rename paper (title)", current);
+  if (value === null) return;
+  const next = value.trim();
+  if (!next) {
+    alert("Title cannot be empty.");
+    return;
+  }
+  await api(`/api/papers/${paper.id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title: next }),
+  });
+  await refreshPapers();
+  if (selectedPaperId === paper.id) await loadDetails(selectedPaperId);
+}
+
+async function deletePaper(paper) {
+  const label = paper.title || paper.doi || paper.id;
+  const ok = confirm(`Delete this paper?\n\n${label}`);
+  if (!ok) return;
+  stopPolling();
+  await api(`/api/papers/${paper.id}`, { method: "DELETE" });
+  if (selectedPaperId === paper.id) selectedPaperId = null;
+  await refreshPapers();
+  await loadDetails(selectedPaperId);
+}
+
 function renderPapers(items) {
   papersList.innerHTML = "";
   if (!items.length) {
@@ -101,9 +130,35 @@ function renderPapers(items) {
     badge.className = "badge";
     badge.textContent = runBadgeText(item.latest_run);
 
+    const actions = document.createElement("div");
+    actions.className = "row";
+    actions.style.marginTop = "6px";
+
+    const renameBtn = document.createElement("button");
+    renameBtn.type = "button";
+    renameBtn.className = "btn btn-secondary btn-small";
+    renameBtn.textContent = "Rename";
+    renameBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await renamePaper(item.paper);
+    });
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "btn btn-danger btn-small";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await deletePaper(item.paper);
+    });
+
+    actions.appendChild(renameBtn);
+    actions.appendChild(deleteBtn);
+
     div.appendChild(title);
     div.appendChild(meta);
     div.appendChild(badge);
+    div.appendChild(actions);
 
     div.addEventListener("click", async () => {
       selectedPaperId = item.paper.id;
@@ -196,7 +251,9 @@ async function loadDetails(paperId) {
   const run = d.latest_run;
   const runStatus = run?.status || "-";
   const err = run?.error || "";
-  setText(detailMeta, `paper_id=${paperId}  •  run=${runStatus}`);
+  const title = d.paper?.title || d.paper?.doi || "";
+  const head = title ? `${title}  •  ` : "";
+  setText(detailMeta, `${head}paper_id=${paperId}  •  run=${runStatus}`);
   setText(detailError, err);
   setText(mdView, d.latest_content_md || "");
   setText(jsonView, d.latest_output ? JSON.stringify(d.latest_output, null, 2) : "");
@@ -210,7 +267,9 @@ async function startPolling(paperId) {
       const d = await api(`/api/papers/${paperId}`);
       const run = d.latest_run;
       const runStatus = run?.status || "-";
-      setText(detailMeta, `paper_id=${paperId}  •  run=${runStatus}`);
+      const title = d.paper?.title || d.paper?.doi || "";
+      const head = title ? `${title}  •  ` : "";
+      setText(detailMeta, `${head}paper_id=${paperId}  •  run=${runStatus}`);
       setText(detailError, run?.error || "");
       setText(mdView, d.latest_content_md || "");
       setText(jsonView, d.latest_output ? JSON.stringify(d.latest_output, null, 2) : "");
@@ -318,4 +377,3 @@ async function main() {
 main().catch((e) => {
   console.error(e);
 });
-
