@@ -46,18 +46,23 @@
                 <span class="pill pill-muted">Choose one source</span>
               </div>
 
+              <!--
               <label class="field">
                 <span class="label">PDF upload</span>
                 <input id="pdfFile" type="file" accept="application/pdf" />
                 <span class="hint">로컬 PDF를 바로 업로드해서 테스트할 수 있어요.</span>
               </label>
+              -->
 
+              <!--
               <label class="field">
                 <span class="label">Google Drive file id</span>
                 <input id="driveFileId" type="text" placeholder="1ALi..." />
                 <span class="hint">Drive에 이미 있는 PDF면 file id만 넣어도 됩니다.</span>
               </label>
+              -->
 
+              <!--
               <div class="grid-2">
                 <label class="field">
                   <span class="label">DOI</span>
@@ -69,6 +74,7 @@
                   <input id="title" type="text" placeholder="paper title..." />
                 </label>
               </div>
+              -->
 
               <label class="field">
                 <span class="label">Analysis JSON upload</span>
@@ -96,10 +102,10 @@
 
               <div class="row">
                 <button id="createBtn" class="btn btn-primary" type="button">Create</button>
-                <button id="analyzeBtn" class="btn btn-secondary" type="button" disabled>Send to GPT</button>
+                <!-- <button id="analyzeBtn" class="btn btn-secondary" type="button" disabled>Analyze</button> -->
                 <span id="createStatus" class="muted"></span>
               </div>
-              <p class="muted small">최소 하나는 필요: PDF / Drive file id / DOI / Analysis JSON</p>
+              <p class="muted small">최소 하나는 필요: Analysis JSON</p>
             </section>
 
             <section class="card">

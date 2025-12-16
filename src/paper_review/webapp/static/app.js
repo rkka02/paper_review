@@ -822,7 +822,7 @@ function applyDetailPayload(d, paperId) {
   setText(mdView, d.latest_content_md || "");
 
   const busy = runStatus === "queued" || runStatus === "running";
-  if (selectedPaperId === paperId) {
+  if (analyzeBtn && selectedPaperId === paperId) {
     analyzeBtn.textContent = busy ? "Analyzing..." : "Analyze";
     analyzeBtn.disabled = busy;
   }
@@ -846,12 +846,12 @@ async function loadDetails(paperId) {
   setText(mdView, "");
   setText(jsonView, "");
   clearStructuredViews();
-  analyzeBtn.disabled = !paperId;
+  if (analyzeBtn) analyzeBtn.disabled = !paperId;
   lastDetailOutputKey = null;
 
   if (!paperId) {
     setText(detailMeta, "");
-    analyzeBtn.textContent = "Analyze";
+    if (analyzeBtn) analyzeBtn.textContent = "Analyze";
     switchDetailTab("overview");
     return;
   }
@@ -880,8 +880,10 @@ async function enqueueAnalyze() {
   const ok = confirm("Analyze this paper now?");
   if (!ok) return;
   setText(detailError, "");
-  analyzeBtn.disabled = true;
-  analyzeBtn.textContent = "Analyzing...";
+  if (analyzeBtn) {
+    analyzeBtn.disabled = true;
+    analyzeBtn.textContent = "Analyzing...";
+  }
   await api(`/api/papers/${selectedPaperId}/analyze`, { method: "POST" });
   toast("Queued analysis.", "info");
   await loadDetails(selectedPaperId);
@@ -895,10 +897,11 @@ async function createPaper() {
   const jsonFile =
     analysisJsonFileInput.files && analysisJsonFileInput.files[0] ? analysisJsonFileInput.files[0] : null;
   try {
-    const doi = doiInput.value.trim() || null;
-    const title = titleInput.value.trim() || null;
-    const driveFileId = driveFileIdInput.value.trim() || null;
-    const file = pdfFileInput.files && pdfFileInput.files[0] ? pdfFileInput.files[0] : null;
+    const doi = doiInput ? doiInput.value.trim() || null : null;
+    const title = titleInput ? titleInput.value.trim() || null : null;
+    const driveFileId = driveFileIdInput ? driveFileIdInput.value.trim() || null : null;
+    const file =
+      pdfFileInput && pdfFileInput.files && pdfFileInput.files[0] ? pdfFileInput.files[0] : null;
 
     if (!jsonText && !jsonFile && !file && !driveFileId && !doi) {
       toast("Provide PDF, Drive file id, DOI, or analysis JSON.", "error", 5000);
@@ -953,10 +956,10 @@ async function createPaper() {
     }
 
     selectedPaperId = paper.id;
-    pdfFileInput.value = "";
-    driveFileIdInput.value = "";
-    doiInput.value = "";
-    titleInput.value = "";
+    if (pdfFileInput) pdfFileInput.value = "";
+    if (driveFileIdInput) driveFileIdInput.value = "";
+    if (doiInput) doiInput.value = "";
+    if (titleInput) titleInput.value = "";
     analysisJsonFileInput.value = "";
     if (analysisJsonText) analysisJsonText.value = "";
     setText(createStatus, "OK");
@@ -1004,7 +1007,7 @@ async function main() {
     if (selectedPaperId) await loadDetails(selectedPaperId);
   });
   if (paperSearch) paperSearch.addEventListener("input", applyPapersFilter);
-  analyzeBtn.addEventListener("click", enqueueAnalyze);
+  if (analyzeBtn) analyzeBtn.addEventListener("click", enqueueAnalyze);
   stopPollBtn.addEventListener("click", stopPolling);
 
   await refreshSession();
