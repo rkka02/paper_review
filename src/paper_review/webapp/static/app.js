@@ -28,12 +28,6 @@ const paperCount = $("paperCount");
 const papersList = $("papersList");
 
 const analyzeBtn = $("analyzeBtn");
-const importJsonBtn = $("importJsonBtn");
-const importJsonFileInput = $("importJsonFile");
-const importJsonStatus = $("importJsonStatus");
-const importJsonText = $("importJsonText");
-const importJsonTextBtn = $("importJsonTextBtn");
-const importJsonClearBtn = $("importJsonClearBtn");
 const stopPollBtn = $("stopPollBtn");
 const detailMeta = $("detailMeta");
 const detailError = $("detailError");
@@ -831,8 +825,6 @@ function applyDetailPayload(d, paperId) {
   if (selectedPaperId === paperId) {
     analyzeBtn.textContent = busy ? "Analyzing..." : "Analyze";
     analyzeBtn.disabled = busy;
-    importJsonBtn.disabled = busy;
-    if (importJsonTextBtn) importJsonTextBtn.disabled = busy;
   }
 
   const outKey = d.latest_output ? JSON.stringify(d.latest_output) : "";
@@ -851,13 +843,10 @@ function applyDetailPayload(d, paperId) {
 async function loadDetails(paperId) {
   stopPolling();
   setText(detailError, "");
-  setText(importJsonStatus, "");
   setText(mdView, "");
   setText(jsonView, "");
   clearStructuredViews();
   analyzeBtn.disabled = !paperId;
-  importJsonBtn.disabled = !paperId;
-  if (importJsonTextBtn) importJsonTextBtn.disabled = !paperId;
   lastDetailOutputKey = null;
 
   if (!paperId) {
@@ -888,6 +877,8 @@ async function startPolling(paperId) {
 
 async function enqueueAnalyze() {
   if (!selectedPaperId) return;
+  const ok = confirm("Analyze this paper now?");
+  if (!ok) return;
   setText(detailError, "");
   analyzeBtn.disabled = true;
   analyzeBtn.textContent = "Analyzing...";
@@ -895,66 +886,6 @@ async function enqueueAnalyze() {
   toast("Queued analysis.", "info");
   await loadDetails(selectedPaperId);
   await startPolling(selectedPaperId);
-}
-
-async function importJsonToSelectedPaper() {
-  if (!selectedPaperId) return;
-  const file =
-    importJsonFileInput.files && importJsonFileInput.files[0] ? importJsonFileInput.files[0] : null;
-  if (!file) return;
-
-  setText(importJsonStatus, "Working...");
-  try {
-    const parsed = parseJsonLoose(await file.text());
-
-    await api(`/api/papers/${selectedPaperId}/import-json`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parsed),
-    });
-    importJsonFileInput.value = "";
-    setText(importJsonStatus, "Imported.");
-    toast("Imported.", "success");
-    await refreshPapers();
-    await loadDetails(selectedPaperId);
-    switchDetailTab("overview");
-  } catch (e) {
-    const msg = String(e.message || e);
-    setText(importJsonStatus, `Error: ${msg}`);
-    toast(msg, "error", 6500);
-  } finally {
-    setTimeout(() => setText(importJsonStatus, ""), 4000);
-  }
-}
-
-async function importJsonTextToSelectedPaper() {
-  if (!selectedPaperId) return;
-  const raw = (importJsonText && importJsonText.value ? importJsonText.value : "").trim();
-  if (!raw) {
-    toast("Paste analysis JSON first.", "error", 5000);
-    return;
-  }
-
-  setText(importJsonStatus, "Working...");
-  try {
-    const parsed = parseJsonLoose(raw);
-    await api(`/api/papers/${selectedPaperId}/import-json`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parsed),
-    });
-    setText(importJsonStatus, "Imported.");
-    toast("Imported.", "success");
-    await refreshPapers();
-    await loadDetails(selectedPaperId);
-    switchDetailTab("overview");
-  } catch (e) {
-    const msg = String(e.message || e);
-    setText(importJsonStatus, `Error: ${msg}`);
-    toast(msg, "error", 6500);
-  } finally {
-    setTimeout(() => setText(importJsonStatus, ""), 4000);
-  }
 }
 
 async function createPaper() {
@@ -1074,19 +1005,6 @@ async function main() {
   });
   if (paperSearch) paperSearch.addEventListener("input", applyPapersFilter);
   analyzeBtn.addEventListener("click", enqueueAnalyze);
-  importJsonBtn.addEventListener("click", () => {
-    if (!selectedPaperId) return;
-    importJsonFileInput.value = "";
-    importJsonFileInput.click();
-  });
-  importJsonFileInput.addEventListener("change", importJsonToSelectedPaper);
-  if (importJsonTextBtn) importJsonTextBtn.addEventListener("click", importJsonTextToSelectedPaper);
-  if (importJsonClearBtn) {
-    importJsonClearBtn.addEventListener("click", () => {
-      if (importJsonText) importJsonText.value = "";
-      toast("Cleared.", "info");
-    });
-  }
   stopPollBtn.addEventListener("click", stopPolling);
 
   await refreshSession();

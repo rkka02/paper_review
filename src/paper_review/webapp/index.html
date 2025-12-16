@@ -96,6 +96,7 @@
 
               <div class="row">
                 <button id="createBtn" class="btn btn-primary" type="button">Create</button>
+                <button id="analyzeBtn" class="btn btn-secondary" type="button" disabled>Analyze</button>
                 <span id="createStatus" class="muted"></span>
               </div>
               <p class="muted small">최소 하나는 필요: PDF / Drive file id / DOI / Analysis JSON</p>
@@ -122,10 +123,6 @@
               <div class="row space-between">
                 <h2 class="h2">Details</h2>
                 <div class="row">
-                  <button id="analyzeBtn" class="btn btn-primary" type="button" disabled>Analyze</button>
-                  <button id="importJsonBtn" class="btn btn-secondary" type="button" disabled>
-                    Import JSON
-                  </button>
                   <button id="stopPollBtn" class="btn btn-secondary hidden" type="button">
                     Stop polling
                   </button>
@@ -134,27 +131,6 @@
 
               <div id="detailMeta" class="muted"></div>
               <div id="detailError" class="error"></div>
-              <input id="importJsonFile" class="hidden" type="file" accept="application/json,.json" />
-              <div id="importJsonStatus" class="muted"></div>
-
-              <details id="importJsonPaste" class="accordion">
-                <summary>Paste analysis JSON (import)</summary>
-                <textarea
-                  id="importJsonText"
-                  class="textarea"
-                  rows="8"
-                  spellcheck="false"
-                  placeholder='{"paper": {...}, "normalized": {...}, "personas": [...], ...}'
-                ></textarea>
-                <div class="row">
-                  <button id="importJsonTextBtn" class="btn btn-secondary" type="button" disabled>
-                    Import pasted JSON
-                  </button>
-                  <button id="importJsonClearBtn" class="btn btn-secondary btn-small" type="button">
-                    Clear
-                  </button>
-                </div>
-              </details>
 
               <div id="detailTabs" class="tabs" data-tabs="details">
                 <button class="tab active" type="button" data-tab="overview">Overview</button>
