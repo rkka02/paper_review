@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import shutil
 import tempfile
@@ -168,6 +169,22 @@ def _upsert_metadata(db: Session, paper: Paper, meta: dict) -> None:
     db.add(paper)
 
 
+def _build_repair_prompt(*, previous_json: dict, validation_error: str | None) -> str:
+    err = (validation_error or "").strip() or "(unknown validation error)"
+    prev = json.dumps(previous_json, ensure_ascii=False, separators=(",", ":"))
+    return (
+        "You previously generated a JSON object but it failed schema validation.\n\n"
+        f"Validation error:\n{err}\n\n"
+        "Task:\n"
+        "- Fix the JSON to match the provided JSON Schema exactly.\n"
+        "- Keep the content as close as possible.\n"
+        "- Do NOT invent new evidence; only keep existing evidence or set evidence arrays to [].\n"
+        "- If a field is missing, add it with a safe default (e.g., [] for arrays, \"\" for strings).\n"
+        "- Output ONLY the corrected JSON.\n\n"
+        f"Previous JSON:\n{prev}\n"
+    )
+
+
 def _process_job(job: Job) -> None:
     timings: dict[str, float] = {}
     t0 = time.perf_counter()
@@ -215,10 +232,22 @@ def _process_job(job: Job) -> None:
                 t_copy = time.perf_counter()
                 shutil.copyfile(src_path, pdf_path)
                 timings["local_copy_s"] = time.perf_counter() - t_copy
+                logger.info(
+                    "pdf_ready source=local_upload paper_id=%s bytes=%s elapsed_s=%.2f",
+                    job.paper_id,
+                    pdf_path.stat().st_size,
+                    timings["local_copy_s"],
+                )
             else:
                 t_dl = time.perf_counter()
                 download_drive_file(job.drive_file_id, pdf_path)
                 timings["drive_download_s"] = time.perf_counter() - t_dl
+                logger.info(
+                    "pdf_ready source=drive paper_id=%s bytes=%s elapsed_s=%.2f",
+                    job.paper_id,
+                    pdf_path.stat().st_size,
+                    timings["drive_download_s"],
+                )
 
             file_size = pdf_path.stat().st_size
             if file_size > settings.max_pdf_mb * 1024 * 1024:
@@ -230,21 +259,54 @@ def _process_job(job: Job) -> None:
             pdf_sha = sha256_file(pdf_path)
 
             t_up = time.perf_counter()
+            logger.info(
+                "openai_file_upload_start paper_id=%s bytes=%s model=%s",
+                job.paper_id,
+                file_size,
+                settings.openai_model,
+            )
             openai_file_id = upload_file(pdf_path)
             timings["openai_upload_s"] = time.perf_counter() - t_up
+            logger.info(
+                "openai_file_upload_done paper_id=%s file_id=%s elapsed_s=%.2f",
+                job.paper_id,
+                openai_file_id,
+                timings["openai_upload_s"],
+            )
 
         try:
             with db_session() as db:
                 _update_run(db, job.run_id, openai_file_id=openai_file_id, timings=timings)
 
             last_error: str | None = None
+            last_candidate: dict | None = None
             canonical: dict | None = None
             for attempt in range(1, 4):
                 t_resp = time.perf_counter()
+                file_attached = bool(openai_file_id) and (attempt == 1 or last_candidate is None)
+                call_file_id = openai_file_id if file_attached else None
+                call_prompt = (
+                    prompt
+                    if attempt == 1
+                    else (
+                        _build_repair_prompt(previous_json=last_candidate, validation_error=last_error)
+                        if last_candidate is not None
+                        else f"{prompt}\n\nFix: {last_error}"
+                    )
+                )
+                logger.info(
+                    "openai_response_start paper_id=%s run_id=%s attempt=%s model=%s has_pdf=%s file_attached=%s",
+                    job.paper_id,
+                    job.run_id,
+                    attempt,
+                    settings.openai_model,
+                    has_pdf,
+                    file_attached,
+                )
                 try:
                     response_json = create_response(
-                        prompt=prompt if attempt == 1 else f"{prompt}\n\nFix: {last_error}",
-                        file_id=openai_file_id,
+                        prompt=call_prompt,
+                        file_id=call_file_id,
                         json_schema=OPENAI_JSON_SCHEMA,
                     )
                 except httpx.TimeoutException as e:
@@ -259,12 +321,27 @@ def _process_job(job: Job) -> None:
                     continue
 
                 timings[f"openai_response_{attempt}_s"] = time.perf_counter() - t_resp
+                logger.info(
+                    "openai_response_done paper_id=%s run_id=%s attempt=%s elapsed_s=%.2f",
+                    job.paper_id,
+                    job.run_id,
+                    attempt,
+                    timings[f"openai_response_{attempt}_s"],
+                )
 
                 try:
                     candidate = extract_output_json(response_json)
+                    last_candidate = candidate
                     parsed = validate_analysis(candidate)
                 except Exception as e:  # noqa: BLE001
                     last_error = str(e)
+                    logger.warning(
+                        "openai_output_invalid paper_id=%s run_id=%s attempt=%s error=%s",
+                        job.paper_id,
+                        job.run_id,
+                        attempt,
+                        last_error,
+                    )
                     continue
 
                 canonical = parsed.model_dump()
