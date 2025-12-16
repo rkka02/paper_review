@@ -49,6 +49,35 @@
 - `WEB_USERNAME`, `WEB_PASSWORD`, `SESSION_SECRET`
 - HTTPS 환경이면 `COOKIE_HTTPS_ONLY=true` 권장
 
+## Cloudtype 배포 체크리스트
+
+권장 구조: **API 서비스 1개 + Worker 서비스 1개** (둘 다 같은 레포/이미지 사용).
+
+1) DB 준비
+
+- Cloudtype 내장 DB 또는 외부 Postgres(Supabase 등) 준비
+- `DATABASE_URL` 설정 (Supabase면 Pooler + `?sslmode=require` 권장)
+
+2) 서비스 2개 생성
+
+- API (웹): 시작 커맨드 예시
+  - `paper-review serve --host 0.0.0.0 --port $PORT --no-reload`
+- Worker(백그라운드): 시작 커맨드 예시
+  - `paper-review worker --log-level INFO`
+
+3) 환경변수(둘 다 동일하게)
+
+- 필수: `DATABASE_URL`, `OPENAI_API_KEY`
+- Web 로그인(권장): `WEB_USERNAME`, `WEB_PASSWORD`, `SESSION_SECRET`, `COOKIE_HTTPS_ONLY=true`
+- Drive 다운로드(선택: 둘 중 하나)
+  - OAuth: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`
+  - Service account: `GOOGLE_SERVICE_ACCOUNT_FILE`(Cloudtype의 secret file/mount 기능 필요)
+- 업로드 테스트(선택): `UPLOAD_DIR` (Cloud 환경이면 `/tmp/uploads` 같은 경로 권장)
+
+4) 동작 확인
+
+- API URL에서 `/health` 확인 후, 루트(`/`)로 접속해 Web UI 로그인/등록/분석
+
 ## API 사용 예시
 
 - 논문 등록(Drive 파일 ID 기반):
