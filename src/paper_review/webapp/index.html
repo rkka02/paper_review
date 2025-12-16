@@ -90,11 +90,30 @@
           <div id="detailMeta" class="muted"></div>
           <div id="detailError" class="error"></div>
 
-          <div class="tabs">
-            <button class="tab active" type="button" data-tab="md">Markdown</button>
+          <div id="detailTabs" class="tabs" data-tabs="details">
+            <button class="tab active" type="button" data-tab="overview">Overview</button>
+            <button class="tab" type="button" data-tab="personas">Personas</button>
+            <button class="tab" type="button" data-tab="normalized">Normalized</button>
+            <button class="tab" type="button" data-tab="diagnostics">Diagnostics</button>
+            <button class="tab" type="button" data-tab="md">Markdown</button>
             <button class="tab" type="button" data-tab="json">JSON</button>
           </div>
-          <pre id="mdView" class="pre"></pre>
+
+          <div id="overviewView" class="panel"></div>
+
+          <div id="personasView" class="panel hidden">
+            <div id="personaTabs" class="tabs tabs-sub"></div>
+            <div id="personaContent" class="panel-body"></div>
+          </div>
+
+          <div id="normalizedView" class="panel hidden">
+            <div id="normalizedTabs" class="tabs tabs-sub"></div>
+            <div id="normalizedContent" class="panel-body"></div>
+          </div>
+
+          <div id="diagnosticsView" class="panel hidden"></div>
+
+          <pre id="mdView" class="pre hidden"></pre>
           <pre id="jsonView" class="pre hidden"></pre>
         </section>
       </section>
@@ -103,4 +122,3 @@
     <script src="/static/app.js"></script>
   </body>
 </html>
-

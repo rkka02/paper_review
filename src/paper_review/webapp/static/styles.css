@@ -272,6 +272,7 @@ input[type="file"] {
 .tabs {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
   margin-top: 10px;
 }
 
@@ -290,4 +291,267 @@ input[type="file"] {
   color: var(--text);
   border-color: rgba(106, 166, 255, 0.55);
   background: rgba(106, 166, 255, 0.14);
+}
+
+.tabs-sub {
+  margin-top: 12px;
+}
+
+.tabs-sub .tab {
+  font-size: 11px;
+  padding: 6px 9px;
+}
+
+.panel {
+  margin-top: 10px;
+}
+
+.panel-body {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.overview-title {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+
+.kv {
+  margin-top: 10px;
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(11, 16, 32, 0.22);
+}
+
+.kv-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 10px;
+  padding: 3px 0;
+}
+
+@media (max-width: 700px) {
+  .kv-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
+
+.kv-key {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.kv-val {
+  overflow-wrap: anywhere;
+}
+
+.section {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.section-title {
+  font-weight: 800;
+  margin-top: 6px;
+}
+
+.section-subtitle {
+  font-weight: 800;
+  font-size: 13px;
+  color: rgba(231, 236, 255, 0.92);
+}
+
+.one-liner {
+  padding: 10px 12px;
+  border: 1px solid rgba(106, 166, 255, 0.35);
+  border-left-width: 4px;
+  border-radius: 12px;
+  background: rgba(106, 166, 255, 0.08);
+}
+
+.prose {
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.link {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  width: fit-content;
+  background: rgba(231, 236, 255, 0.04);
+}
+
+.pill-primary {
+  border-color: rgba(106, 166, 255, 0.55);
+  color: var(--text);
+  background: rgba(106, 166, 255, 0.14);
+}
+
+.pill-page {
+  border-color: rgba(231, 236, 255, 0.22);
+  color: rgba(231, 236, 255, 0.88);
+  background: rgba(11, 16, 32, 0.18);
+}
+
+.pill-sev-low {
+  border-color: rgba(231, 236, 255, 0.18);
+}
+
+.pill-sev-med {
+  border-color: rgba(255, 210, 106, 0.4);
+  color: #ffe1a6;
+  background: rgba(255, 210, 106, 0.12);
+}
+
+.pill-sev-high {
+  border-color: rgba(255, 106, 106, 0.45);
+  color: #ffbaba;
+  background: rgba(255, 106, 106, 0.12);
+}
+
+.pill-lim-known {
+  border-color: rgba(106, 166, 255, 0.45);
+  color: rgba(231, 236, 255, 0.92);
+  background: rgba(106, 166, 255, 0.12);
+}
+
+.pill-lim-unknown {
+  border-color: rgba(168, 178, 214, 0.22);
+}
+
+.item {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(11, 16, 32, 0.18);
+}
+
+.item-text {
+  flex: 1;
+  min-width: 220px;
+  overflow-wrap: anywhere;
+}
+
+.bullets {
+  margin: 6px 0 0 18px;
+  padding: 0;
+}
+
+.bullets li {
+  margin: 4px 0;
+}
+
+.table-wrap {
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(11, 16, 32, 0.18);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 560px;
+}
+
+.table th,
+.table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(231, 236, 255, 0.08);
+  vertical-align: top;
+}
+
+.table th {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 800;
+  text-align: left;
+  background: rgba(11, 16, 32, 0.22);
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.evidence {
+  border: 1px solid rgba(231, 236, 255, 0.14);
+  border-radius: 12px;
+  background: rgba(11, 16, 32, 0.2);
+  padding: 8px 10px;
+}
+
+.evidence summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.evidence[open] summary {
+  color: var(--text);
+}
+
+.evidence-list {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.evidence-item {
+  display: grid;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(231, 236, 255, 0.08);
+}
+
+.evidence-item:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.evidence-quote {
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    "Courier New",
+    monospace;
+  font-size: 12px;
+  padding: 10px 10px;
+  border: 1px solid rgba(231, 236, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(11, 16, 32, 0.3);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.evidence-why {
+  font-size: 12px;
 }
