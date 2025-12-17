@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Any, Protocol
 
 import httpx
 
@@ -39,10 +40,68 @@ def _coerce_json_object(raw: str) -> dict[str, Any]:
     if start_obj != -1 and end_obj != -1 and end_obj > start_obj:
         text = text[start_obj : end_obj + 1].strip()
 
-    data = json.loads(text)
-    if not isinstance(data, dict):
-        raise ValueError("Expected a JSON object.")
-    return data
+    def escape_control_chars_in_strings(s: str) -> str:
+        out: list[str] = []
+        in_str = False
+        esc = False
+        i = 0
+        while i < len(s):
+            ch = s[i]
+            if in_str:
+                if esc:
+                    out.append(ch)
+                    esc = False
+                else:
+                    if ch == "\\":
+                        out.append(ch)
+                        esc = True
+                    elif ch == '"':
+                        out.append(ch)
+                        in_str = False
+                    elif ch == "\n":
+                        out.append("\\n")
+                    elif ch == "\r":
+                        if i + 1 < len(s) and s[i + 1] == "\n":
+                            out.append("\\n")
+                            i += 1
+                        else:
+                            out.append("\\n")
+                    elif ch == "\t":
+                        out.append("\\t")
+                    else:
+                        out.append(ch)
+            else:
+                if ch == '"':
+                    out.append(ch)
+                    in_str = True
+                else:
+                    out.append(ch)
+            i += 1
+        return "".join(out)
+
+    def remove_trailing_commas(s: str) -> str:
+        # Best-effort: turn `,}` / `,]` into `}` / `]`
+        return re.sub(r",(\s*[}\]])", r"\1", s)
+
+    last_err: Exception | None = None
+    for attempt in range(3):
+        try:
+            candidate = text
+            if attempt == 1:
+                candidate = escape_control_chars_in_strings(candidate)
+            elif attempt == 2:
+                candidate = remove_trailing_commas(escape_control_chars_in_strings(candidate))
+
+            data = json.loads(candidate)
+            if not isinstance(data, dict):
+                raise ValueError("Expected a JSON object.")
+            return data
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            continue
+
+    snippet = (text[:400] + "...") if len(text) > 400 else text
+    raise ValueError(f"Invalid JSON output: {last_err}. Output snippet:\n{snippet}") from last_err
 
 
 @dataclass(slots=True)
@@ -195,6 +254,63 @@ class GoogleJsonLLM:
 
     provider: str = "google"
 
+    @staticmethod
+    def _is_simple_reply_schema(json_schema: dict[str, Any]) -> bool:
+        schema = (json_schema or {}).get("schema")
+        if not isinstance(schema, dict):
+            return False
+        if schema.get("type") != "object":
+            return False
+        props = schema.get("properties")
+        if not isinstance(props, dict):
+            return False
+        reply = props.get("reply")
+        if not isinstance(reply, dict):
+            return False
+        if reply.get("type") != "string":
+            return False
+        req = schema.get("required")
+        if not isinstance(req, list) or "reply" not in req:
+            return False
+        return True
+
+    @staticmethod
+    def _extract_reply_best_effort(raw: str) -> str:
+        text = (raw or "").strip()
+        if not text:
+            return ""
+
+        if "```" in text:
+            lines: list[str] = []
+            in_block = False
+            for line in text.splitlines():
+                if line.strip().startswith("```"):
+                    in_block = not in_block
+                    continue
+                if in_block:
+                    lines.append(line)
+            if lines:
+                text = "\n".join(lines).strip()
+
+        for pattern in [
+            r'"reply"\s*:\s*"(.*)"\s*[,}]',
+            r"'reply'\s*:\s*'(.*)'\s*[,}]",
+        ]:
+            m = re.search(pattern, text, flags=re.DOTALL)
+            if not m:
+                continue
+            val = (m.group(1) or "").strip()
+            # Best-effort unescaping for common sequences.
+            val = (
+                val.replace("\\r\\n", "\n")
+                .replace("\\n", "\n")
+                .replace("\\t", "\t")
+                .replace('\\"', '"')
+            )
+            return val.strip()
+
+        return text.strip()
+
     def generate_json(self, *, system: str, user: str, json_schema: dict[str, Any]) -> dict[str, Any]:
         key = (self.api_key or "").strip() or (settings.google_ai_api_key or "").strip()
         if not key:
@@ -298,4 +414,11 @@ class GoogleJsonLLM:
 
         if not str(text or "").strip():
             raise ValueError("Empty LLM output.")
-        return _coerce_json_object(str(text))
+        raw = str(text)
+        try:
+            return _coerce_json_object(raw)
+        except Exception:
+            # Discord persona replies: allow plain-text fallbacks if the model doesn't emit strict JSON.
+            if self._is_simple_reply_schema(json_schema):
+                return {"reply": self._extract_reply_best_effort(raw)}
+            raise
