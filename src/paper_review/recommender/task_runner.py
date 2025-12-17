@@ -292,14 +292,16 @@ def run_recommendation_task(task_id: uuid.UUID) -> None:
 
                 url = (settings.discord_notify_webhook_url or settings.discord_webhook_url or "").strip()
                 if url:
+                    intro = (
+                        "사서 알림) 자동 추천 업데이트가 끝났어요."
+                        if trigger == "auto"
+                        else "사서 알림) 새 추천 목록을 정리해뒀어요."
+                    )
                     send_discord_webhook(
                         url=url,
                         content=(
-                            "✅ Recommender finished\n"
-                            f"- trigger: {trigger}\n"
-                            f"- task_id: {task_id}\n"
-                            f"- run_id: {run_id}\n"
-                            f"- items: {len(payload.items)}"
+                            f"{intro}\n"
+                            f"총 {len(payload.items)}편이에요. Web UI의 Recs 탭에서 확인해 주세요."
                         ),
                         username=settings.discord_notify_username,
                         avatar_url=settings.discord_notify_avatar_url,
@@ -316,12 +318,15 @@ def run_recommendation_task(task_id: uuid.UUID) -> None:
 
                 url = (settings.discord_notify_webhook_url or settings.discord_webhook_url or "").strip()
                 if url:
+                    err = str(e)
+                    if len(err) > 240:
+                        err = err[:240].rstrip() + "..."
                     send_discord_webhook(
                         url=url,
                         content=(
-                            "❌ Recommender failed\n"
-                            f"- task_id: {task_id}\n"
-                            f"- error: {type(e).__name__}: {e}"
+                            "사서 알림) 추천 목록을 정리하다가 문제가 생겼어요.\n"
+                            "잠시 후 다시 시도해 주세요.\n"
+                            f"(오류: {type(e).__name__}: {err})"
                         ),
                         username=settings.discord_notify_username,
                         avatar_url=settings.discord_notify_avatar_url,
