@@ -120,6 +120,7 @@ DISCORD_PERSONA_DEFAULT_LLM_PROVIDER=openai
 - `openai`: `OPENAI_API_KEY`, `OPENAI_MODEL` 필요
 - `google`: `GOOGLE_AI_API_KEY`, `GOOGLE_AI_MODEL` 필요
 - `ollama`: `ollama serve` 실행 + `OLLAMA_BASE_URL`, `LOCAL_LLM_MODEL` 설정
+  - 팁: Gemini 출력이 중간에 끊기면(`finishReason=MAX_TOKENS`), `.env`의 `GOOGLE_AI_MAX_OUTPUT_TOKENS` 값을 올려보세요.
 
 ### 실행
 - Bot 실행: `paper-review discord-bot`

@@ -268,8 +268,27 @@ class GoogleJsonLLM:
     model: str = field(default_factory=lambda: settings.google_ai_model)
     api_key: str | None = field(default_factory=lambda: settings.google_ai_api_key)
     timeout_seconds: int = field(default_factory=lambda: settings.google_ai_timeout_seconds)
+    max_output_tokens: int = field(default_factory=lambda: settings.google_ai_max_output_tokens)
 
     provider: str = "google"
+
+    @staticmethod
+    def _sanitize_response_schema(schema: Any) -> Any:
+        """
+        Google `responseSchema` uses a restricted schema dialect.
+
+        At minimum it does not accept `additionalProperties`, so we strip it recursively.
+        """
+        if isinstance(schema, dict):
+            out: dict[str, Any] = {}
+            for k, v in schema.items():
+                if k == "additionalProperties":
+                    continue
+                out[k] = GoogleJsonLLM._sanitize_response_schema(v)
+            return out
+        if isinstance(schema, list):
+            return [GoogleJsonLLM._sanitize_response_schema(x) for x in schema]
+        return schema
 
     def generate_json(self, *, system: str, user: str, json_schema: dict[str, Any]) -> dict[str, Any]:
         key = (self.api_key or "").strip() or (settings.google_ai_api_key or "").strip()
@@ -305,23 +324,21 @@ class GoogleJsonLLM:
 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent"
 
-        body: dict[str, Any] = {
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [{"text": msg}],
-                }
-            ],
-            "generationConfig": {
-                "temperature": 0.2,
-                "maxOutputTokens": 512,
-                "responseMimeType": "application/json",
-            },
+        base_generation_config: dict[str, Any] = {
+            "temperature": 0.2,
+            "maxOutputTokens": int(self.max_output_tokens),
+            "responseMimeType": "application/json",
+        }
+
+        gen_with_schema = dict(base_generation_config)
+        if isinstance(schema, dict) and schema:
+            gen_with_schema["responseSchema"] = self._sanitize_response_schema(schema)
+
+        body_base: dict[str, Any] = {
+            "contents": [{"role": "user", "parts": [{"text": msg}]}],
         }
         if system:
-            body["systemInstruction"] = {"parts": [{"text": system}]}
-        if isinstance(schema, dict) and schema:
-            body["generationConfig"]["responseSchema"] = schema
+            body_base["systemInstruction"] = {"parts": [{"text": system}]}
 
         timeout = httpx.Timeout(
             connect=10.0,
@@ -330,24 +347,36 @@ class GoogleJsonLLM:
             pool=10.0,
         )
         with httpx.Client(timeout=timeout) as client:
-            try:
-                r = client.post(url, params={"key": key}, json=body)
-                r.raise_for_status()
-                payload = r.json()
-            except httpx.HTTPStatusError as e:
-                # Fallback: some deployments/models may not support responseMimeType/responseSchema.
-                status = getattr(e.response, "status_code", None)
-                if status not in {400, 404}:
+            last_exc: Exception | None = None
+            payload: Any = None
+            for gen in [
+                gen_with_schema,
+                base_generation_config,  # retry without responseSchema (schema dialect mismatch)
+                {
+                    "temperature": 0.2,
+                    "maxOutputTokens": int(self.max_output_tokens),
+                },  # retry without responseMimeType/responseSchema
+            ]:
+                try:
+                    body = dict(body_base)
+                    body["generationConfig"] = gen
+                    r = client.post(url, params={"key": key}, json=body)
+                    r.raise_for_status()
+                    payload = r.json()
+                    last_exc = None
+                    break
+                except httpx.HTTPStatusError as e:
+                    last_exc = e
+                    status = getattr(e.response, "status_code", None)
+                    if status not in {400, 404}:
+                        raise
+                    continue
+                except httpx.HTTPError as e:
+                    last_exc = e
                     raise
-                fallback: dict[str, Any] = {
-                    "contents": [{"role": "user", "parts": [{"text": msg}]}],
-                    "generationConfig": {"temperature": 0.2, "maxOutputTokens": 512},
-                }
-                if system:
-                    fallback["systemInstruction"] = {"parts": [{"text": system}]}
-                r2 = client.post(url, params={"key": key}, json=fallback)
-                r2.raise_for_status()
-                payload = r2.json()
+
+            if last_exc is not None and payload is None:
+                raise last_exc
 
         if isinstance(payload, dict) and payload.get("error"):
             raise RuntimeError(f"Google AI error: {payload.get('error')}")
@@ -378,13 +407,27 @@ class GoogleJsonLLM:
         try:
             return _coerce_json_object(raw)
         except Exception as e:  # noqa: BLE001
+            hint = ""
+            try:
+                finish_reason = None
+                if isinstance(payload, dict):
+                    cands = payload.get("candidates") or []
+                    if isinstance(cands, list) and cands and isinstance(cands[0], dict):
+                        finish_reason = cands[0].get("finishReason")
+                if finish_reason == "MAX_TOKENS":
+                    hint = (
+                        f" Hint: output may be truncated (finishReason=MAX_TOKENS). "
+                        f"Increase GOOGLE_AI_MAX_OUTPUT_TOKENS (currently {self.max_output_tokens})."
+                    )
+            except Exception:  # noqa: BLE001
+                hint = ""
             raw_response = None
             try:
                 raw_response = json.dumps(payload, ensure_ascii=False, indent=2)
             except Exception:  # noqa: BLE001
                 raw_response = str(payload)
             raise LLMOutputParseError(
-                f"Failed to parse JSON output ({type(e).__name__}: {e}).",
+                f"Failed to parse JSON output ({type(e).__name__}: {e}).{hint}",
                 provider=self.provider,
                 model=self.model,
                 raw_output=raw,
