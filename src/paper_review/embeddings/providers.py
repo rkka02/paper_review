@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Protocol, Sequence
 
 import httpx
 
-from paper_review.local_ai.embeddings import HuggingFaceEmbedder
 from paper_review.settings import settings
 
 
@@ -15,31 +14,6 @@ class Embedder(Protocol):
 
     def embed_passages(self, texts: Sequence[str]) -> list[list[float]]: ...
     def embed_queries(self, queries: Sequence[str]) -> list[list[float]]: ...
-
-
-@dataclass(slots=True)
-class LocalEmbedder:
-    model: str
-    device: str | None = None
-    batch_size: int = 32
-    normalize: bool = True
-
-    provider: str = "local"
-    _impl: HuggingFaceEmbedder = field(init=False, repr=False)
-
-    def __post_init__(self) -> None:
-        self._impl = HuggingFaceEmbedder(
-            model_name=self.model,
-            device=self.device,
-            batch_size=self.batch_size,
-            normalize=self.normalize,
-        )
-
-    def embed_passages(self, texts: Sequence[str]) -> list[list[float]]:
-        return self._impl.embed_passages(texts)
-
-    def embed_queries(self, queries: Sequence[str]) -> list[list[float]]:
-        return self._impl.embed_queries(queries)
 
 
 def _openai_headers() -> dict[str, str]:

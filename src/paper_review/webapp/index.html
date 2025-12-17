@@ -202,12 +202,18 @@
 
     <section id="recsOverlay" class="graph-overlay hidden" aria-hidden="true">
       <div class="graph-toolbar">
-        <div class="graph-title">Today’s recommendations</div>
+        <div class="graph-title">Today's recommendations</div>
         <div class="spacer"></div>
+        <button id="recsRunBtn" class="btn btn-primary btn-small" type="button">Run</button>
+        <button id="recsLogsBtn" class="btn btn-secondary btn-small" type="button">Logs</button>
         <button id="recsRefreshBtn" class="btn btn-secondary btn-small" type="button">Refresh</button>
         <button id="recsCloseBtn" class="btn btn-secondary btn-small" type="button">Close</button>
       </div>
       <div class="graph-canvas-wrap recs-wrap">
+        <div id="recsTaskMeta" class="muted small"></div>
+        <div id="recsLogsPanel" class="recs-logs hidden" aria-hidden="true">
+          <pre id="recsLogs" class="recs-logs-pre"></pre>
+        </div>
         <div id="recsMeta" class="muted small"></div>
         <div id="recsContent" class="recs-content"></div>
       </div>

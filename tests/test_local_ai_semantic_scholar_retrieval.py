@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from paper_review.local_ai.embeddings import HuggingFaceEmbedder
-from paper_review.local_ai.vector_search import top_k_cosine
+from paper_review.embeddings import get_embedder
 from paper_review.semantic_scholar import search_papers
+from paper_review.settings import settings
 
 
 def _env_flag(name: str) -> bool:
@@ -130,8 +130,8 @@ def _collect_field_papers(
 def corpus() -> list[dict]:
     if not RUN:
         pytest.skip("Set RUN_LOCAL_AI_TESTS=1 to run Semantic Scholar + embedding integration tests.")
-
-    pytest.importorskip("sentence_transformers")
+    if not settings.openai_api_key:
+        pytest.skip("Set OPENAI_API_KEY to run Semantic Scholar + OpenAI embeddings integration tests.")
 
     cache_file = _cache_path()
 
@@ -177,10 +177,7 @@ def corpus() -> list[dict]:
 
 @pytest.fixture(scope="session")
 def embedded(corpus: list[dict]) -> dict:
-    model_name = (os.getenv("LOCAL_EMBED_MODEL") or os.getenv("LOCAL_AI_EMBED_MODEL") or "").strip() or "intfloat/e5-base-v2"
-    device = (os.getenv("LOCAL_EMBED_DEVICE") or os.getenv("LOCAL_AI_EMBED_DEVICE") or "").strip() or None
-
-    embedder = HuggingFaceEmbedder(model_name=model_name, device=device)
+    embedder = get_embedder()
     texts = [_paper_text(p) for p in corpus]
     vecs = embedder.embed_passages(texts)
 
@@ -189,6 +186,17 @@ def embedded(corpus: list[dict]) -> dict:
     assert all(len(v) == dim for v in vecs)
 
     return {"papers": corpus, "vectors": vecs, "embedder": embedder}
+
+
+def top_k_cosine(query_vec: list[float], matrix: list[list[float]], k: int = 10) -> list[tuple[int, float]]:
+    def dot(a: list[float], b: list[float]) -> float:
+        return float(sum(x * y for x, y in zip(a, b, strict=False)))
+
+    if k <= 0:
+        return []
+    scores = [(i, dot(query_vec, v)) for i, v in enumerate(matrix)]
+    scores.sort(key=lambda x: x[1], reverse=True)
+    return scores[:k]
 
 
 def test_fetch_and_embed_has_expected_shapes(corpus: list[dict], embedded: dict) -> None:
@@ -208,7 +216,7 @@ def test_domain_query_retrieves_correct_field(embedded: dict, field: str) -> Non
     spec = FIELDS[field]
     papers: list[dict] = embedded["papers"]
     vecs: list[list[float]] = embedded["vectors"]
-    embedder: HuggingFaceEmbedder = embedded["embedder"]
+    embedder = embedded["embedder"]
 
     qvec = embedder.embed_queries([spec.eval_query])[0]
     top = top_k_cosine(qvec, vecs, k=10)

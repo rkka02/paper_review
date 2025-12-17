@@ -59,7 +59,12 @@ const recsBtn = $("recsBtn");
 const recsBadge = $("recsBadge");
 const recsOverlay = $("recsOverlay");
 const recsCloseBtn = $("recsCloseBtn");
+const recsRunBtn = $("recsRunBtn");
+const recsLogsBtn = $("recsLogsBtn");
 const recsRefreshBtn = $("recsRefreshBtn");
+const recsTaskMeta = $("recsTaskMeta");
+const recsLogsPanel = $("recsLogsPanel");
+const recsLogs = $("recsLogs");
 const recsMeta = $("recsMeta");
 const recsContent = $("recsContent");
 
@@ -87,6 +92,9 @@ let paperMenuEl = null;
 let paperMenuToken = null;
 let graphState = null;
 let latestRecs = null;
+let latestRecsTask = null;
+let recsTaskPollHandle = null;
+let recsLogsVisible = false;
 
 function show(el) {
   el.classList.remove("hidden");
@@ -1462,6 +1470,7 @@ function isRecsOpen() {
 
 function closeRecs() {
   if (!recsOverlay) return;
+  stopRecsTaskPolling();
   recsOverlay.classList.add("hidden");
   document.body.classList.remove("graph-open");
   window.removeEventListener("keydown", onRecsKeydown, true);
@@ -1477,16 +1486,15 @@ function onRecsKeydown(e) {
 function setRecsBadge(count) {
   if (!recsBtn) return;
   const n = Math.max(0, Number(count || 0));
+  show(recsBtn);
+  if (!recsBadge) return;
   if (n <= 0) {
-    if (recsBadge) recsBadge.classList.add("hidden");
-    recsBtn.classList.add("hidden");
+    hide(recsBadge);
+    recsBadge.textContent = "";
     return;
   }
-  recsBtn.classList.remove("hidden");
-  if (recsBadge) {
-    recsBadge.classList.remove("hidden");
-    recsBadge.textContent = String(n);
-  }
+  show(recsBadge);
+  recsBadge.textContent = String(n);
 }
 
 function renderRecs(run) {
@@ -1608,6 +1616,137 @@ function renderRecs(run) {
   }
 }
 
+function stopRecsTaskPolling() {
+  if (recsTaskPollHandle) {
+    clearTimeout(recsTaskPollHandle);
+    recsTaskPollHandle = null;
+  }
+}
+
+function setRecsLogsVisible(visible) {
+  recsLogsVisible = Boolean(visible);
+  if (!recsLogsPanel) return;
+  if (recsLogsVisible) {
+    show(recsLogsPanel);
+    recsLogsPanel.setAttribute("aria-hidden", "false");
+  } else {
+    hide(recsLogsPanel);
+    recsLogsPanel.setAttribute("aria-hidden", "true");
+  }
+}
+
+function toggleRecsLogs() {
+  setRecsLogsVisible(!recsLogsVisible);
+  if (recsLogsVisible) renderRecsTask(latestRecsTask);
+}
+
+function formatTaskLogs(logs) {
+  if (!Array.isArray(logs) || logs.length === 0) return "";
+  const recent = logs.slice(-250);
+  return recent
+    .map((l) => {
+      const ts = l?.ts ? String(l.ts) : "";
+      const level = l?.level ? String(l.level).toUpperCase() : "INFO";
+      const msg = l?.message ? String(l.message) : "";
+      return `${ts} [${level}] ${msg}`.trimEnd();
+    })
+    .join("\n")
+    .trim();
+}
+
+function renderRecsTask(task) {
+  latestRecsTask = task || null;
+
+  const status = String(task?.status || "").trim() || null;
+  const startedAt = task?.started_at ? String(task.started_at) : "";
+  const finishedAt = task?.finished_at ? String(task.finished_at) : "";
+  const error = task?.error ? String(task.error) : "";
+
+  if (recsRunBtn) {
+    const running = status === "running";
+    recsRunBtn.disabled = running;
+    recsRunBtn.textContent = running ? "Running…" : "Run";
+  }
+
+  if (recsTaskMeta) {
+    if (!task) {
+      recsTaskMeta.textContent = "";
+    } else if (status === "running") {
+      recsTaskMeta.textContent = startedAt ? `Recommender: running (started ${startedAt})` : "Recommender: running";
+    } else if (status === "succeeded") {
+      recsTaskMeta.textContent = finishedAt ? `Recommender: done (finished ${finishedAt})` : "Recommender: done";
+    } else if (status === "failed") {
+      recsTaskMeta.textContent = `Recommender: failed${error ? ` (${error})` : ""}`;
+    } else {
+      recsTaskMeta.textContent = `Recommender: ${status}`;
+    }
+  }
+
+  if (recsLogs && recsLogsVisible) {
+    recsLogs.textContent = formatTaskLogs(task?.logs || []);
+    recsLogs.scrollTop = recsLogs.scrollHeight;
+  }
+}
+
+async function pollRecsTask(taskId) {
+  stopRecsTaskPolling();
+
+  const id = String(taskId || "").trim();
+  if (!id) return;
+
+  const tick = async () => {
+    if (!isRecsOpen()) return;
+    try {
+      const task = await api(`/api/recommendations/tasks/${id}`);
+      renderRecsTask(task);
+
+      const status = String(task?.status || "").trim();
+      if (status === "running") {
+        recsTaskPollHandle = setTimeout(tick, 1200);
+        return;
+      }
+
+      if (status === "succeeded") {
+        await refreshRecommendations({ silent: true });
+        if (isRecsOpen()) renderRecs(latestRecs);
+      }
+    } catch (e) {
+      console.warn("recs task poll failed:", e);
+      recsTaskPollHandle = setTimeout(tick, 2500);
+    }
+  };
+
+  recsTaskPollHandle = setTimeout(tick, 250);
+}
+
+async function refreshRecsTask({ silent = false } = {}) {
+  try {
+    const task = await api("/api/recommendations/tasks/latest");
+    renderRecsTask(task);
+    if (String(task?.status || "") === "running") await pollRecsTask(task.id);
+  } catch (e) {
+    if (e && e.status === 404) {
+      renderRecsTask(null);
+      return;
+    }
+    if (!silent) toast(String(e.message || e), "error", 6500);
+  }
+}
+
+async function startRecsTask() {
+  const ok = confirm("새로 추천을 생성할까요? (잠시 걸릴 수 있어요)");
+  if (!ok) return;
+  try {
+    const task = await api("/api/recommendations/tasks", { method: "POST" });
+    toast("Recommender started.", "info");
+    renderRecsTask(task);
+    await pollRecsTask(task.id);
+  } catch (e) {
+    toast(String(e.message || e), "error", 6500);
+    await refreshRecsTask({ silent: true });
+  }
+}
+
 async function refreshRecommendations({ silent = false } = {}) {
   try {
     latestRecs = await api("/api/recommendations/latest");
@@ -1635,6 +1774,10 @@ async function openRecs() {
   window.addEventListener("keydown", onRecsKeydown, true);
 
   if (recsMeta) recsMeta.textContent = "Loading...";
+  if (recsTaskMeta) recsTaskMeta.textContent = "";
+  if (recsLogs) recsLogs.textContent = "";
+  setRecsLogsVisible(false);
+  await refreshRecsTask({ silent: true });
   await refreshRecommendations({ silent: true });
   renderRecs(latestRecs);
 }
@@ -2684,6 +2827,8 @@ async function main() {
   logoutBtn.addEventListener("click", logout);
   if (recsBtn) recsBtn.addEventListener("click", openRecs);
   if (recsCloseBtn) recsCloseBtn.addEventListener("click", closeRecs);
+  if (recsRunBtn) recsRunBtn.addEventListener("click", startRecsTask);
+  if (recsLogsBtn) recsLogsBtn.addEventListener("click", toggleRecsLogs);
   if (recsRefreshBtn) recsRefreshBtn.addEventListener("click", () => refreshRecommendations());
   if (graphBtn) graphBtn.addEventListener("click", openGraph);
   if (graphCloseBtn) graphCloseBtn.addEventListener("click", closeGraph);

@@ -303,3 +303,26 @@ class RecommendationItem(Base):
     )
 
     run: Mapped[RecommendationRun] = relationship(back_populates="items")
+
+
+class RecommendationTask(Base):
+    __tablename__ = "recommendation_tasks"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    trigger: Mapped[str] = mapped_column(String(16), nullable=False, default="manual", index=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued", index=True)
+    config: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    logs: Mapped[list[dict] | None] = mapped_column(JSONB, nullable=True)
+    run_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("recommendation_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

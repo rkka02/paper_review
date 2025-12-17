@@ -187,3 +187,20 @@ create index if not exists recommendation_items_folder_id_idx on recommendation_
 create index if not exists recommendation_items_kind_idx on recommendation_items(kind);
 create unique index if not exists recommendation_items_run_group_rank_uniq
   on recommendation_items(run_id, kind, folder_id, rank);
+
+create table if not exists recommendation_tasks (
+  id uuid primary key,
+  trigger text not null default 'manual',
+  status text not null default 'queued',
+  config jsonb,
+  logs jsonb,
+  run_id uuid references recommendation_runs(id) on delete set null,
+  error text,
+  created_at timestamptz not null default now(),
+  started_at timestamptz,
+  finished_at timestamptz
+);
+
+create index if not exists recommendation_tasks_status_idx on recommendation_tasks(status);
+create index if not exists recommendation_tasks_trigger_idx on recommendation_tasks(trigger);
+create index if not exists recommendation_tasks_created_at_idx on recommendation_tasks(created_at);

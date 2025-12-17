@@ -76,11 +76,8 @@ def show_config() -> None:
         "SERVER_API_KEY": "***" if settings.server_api_key else None,
         "OPENAI_MODEL": settings.openai_model,
         "OPENAI_API_KEY": "***" if settings.openai_api_key else None,
-        "EMBEDDINGS_PROVIDER": settings.embeddings_provider,
+        "EMBEDDINGS_PROVIDER": "openai",
         "EMBEDDINGS_NORMALIZE": settings.embeddings_normalize,
-        "LOCAL_EMBED_MODEL": settings.local_embed_model,
-        "LOCAL_EMBED_DEVICE": settings.local_embed_device,
-        "LOCAL_EMBED_BATCH_SIZE": settings.local_embed_batch_size,
         "OPENAI_EMBED_MODEL": settings.openai_embed_model,
         "OPENAI_EMBED_BATCH_SIZE": settings.openai_embed_batch_size,
         "RECOMMENDER_QUERY_LLM_PROVIDER": settings.recommender_query_llm_provider,
@@ -164,7 +161,7 @@ def embeddings_reset(
 
 @app.command()
 def embeddings_rebuild(
-    provider: str | None = typer.Option(None, help="Override EMBEDDINGS_PROVIDER for this run."),
+    provider: str | None = typer.Option(None, help="Embeddings provider (must be 'openai')."),
     limit: int | None = typer.Option(None, help="Only embed the newest N papers (debug)."),
     yes: bool = typer.Option(False, "--yes", "-y", help="Do not prompt; proceed immediately."),
 ) -> None:

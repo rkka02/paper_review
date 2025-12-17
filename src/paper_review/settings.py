@@ -36,12 +36,7 @@ class Settings(BaseSettings):
     openai_delete_files: bool = Field(default=True, alias="OPENAI_DELETE_FILES")
     openai_timeout_seconds: int = Field(default=600, alias="OPENAI_TIMEOUT_SECONDS")
 
-    embeddings_provider: str = Field(default="local", alias="EMBEDDINGS_PROVIDER")
     embeddings_normalize: bool = Field(default=True, alias="EMBEDDINGS_NORMALIZE")
-
-    local_embed_model: str = Field(default="intfloat/e5-base-v2", alias="LOCAL_EMBED_MODEL")
-    local_embed_device: str | None = Field(default=None, alias="LOCAL_EMBED_DEVICE")
-    local_embed_batch_size: int = Field(default=32, alias="LOCAL_EMBED_BATCH_SIZE")
 
     openai_embed_model: str = Field(default="text-embedding-3-large", alias="OPENAI_EMBED_MODEL")
     openai_embed_batch_size: int = Field(default=96, alias="OPENAI_EMBED_BATCH_SIZE")
@@ -51,14 +46,13 @@ class Settings(BaseSettings):
 
     recommender_query_llm_provider: str = Field(default="local", alias="RECOMMENDER_QUERY_LLM_PROVIDER")
     recommender_decider_llm_provider: str = Field(default="openai", alias="RECOMMENDER_DECIDER_LLM_PROVIDER")
+    recommender_auto_run: bool = Field(default=False, alias="RECOMMENDER_AUTO_RUN")
+    recommender_auto_run_time: str = Field(default="06:00", alias="RECOMMENDER_AUTO_RUN_TIME")
 
     local_llm_model: str = Field(default="gpt-oss-20b", alias="LOCAL_LLM_MODEL")
-    local_llm_device_map: str = Field(default="auto", alias="LOCAL_LLM_DEVICE_MAP")
-    local_llm_torch_dtype: str = Field(default="auto", alias="LOCAL_LLM_TORCH_DTYPE")
     local_llm_max_new_tokens: int = Field(default=256, alias="LOCAL_LLM_MAX_NEW_TOKENS")
     local_llm_temperature: float = Field(default=0.2, alias="LOCAL_LLM_TEMPERATURE")
     local_llm_top_p: float = Field(default=0.95, alias="LOCAL_LLM_TOP_P")
-    local_llm_trust_remote_code: bool = Field(default=False, alias="LOCAL_LLM_TRUST_REMOTE_CODE")
 
     ollama_base_url: str = Field(default="http://127.0.0.1:11434", alias="OLLAMA_BASE_URL")
     ollama_timeout_seconds: int = Field(default=120, alias="OLLAMA_TIMEOUT_SECONDS")

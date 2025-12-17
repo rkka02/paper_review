@@ -5,6 +5,7 @@ import random
 import time
 import uuid
 from dataclasses import asdict, dataclass
+from collections.abc import Callable
 
 from paper_review.embeddings import Embedder, get_embedder
 from paper_review.llm import JsonLLM, get_decider_llm, get_query_llm
@@ -204,6 +205,7 @@ def build_recommendations(
     query_llm: JsonLLM | None = None,
     decider_llm: JsonLLM | None = None,
     seed_selector: SeedSelector | None = None,
+    progress: Callable[[str], None] | None = None,
 ) -> RecommendationRunCreate:
     cfg = config or RecommenderConfig()
     rng = random.Random(cfg.random_seed)
@@ -234,6 +236,8 @@ def build_recommendations(
         by_folder.setdefault(fid, []).append(p)
 
     folder_ids = [fid for fid, papers in by_folder.items() if papers]
+    if progress:
+        progress(f"Prepared library: {len(folder_ids)} folder(s), {len(library)} paper(s).")
 
     folder_seeds: dict[str, list[dict]] = {}
     folder_queries: dict[str, list[str]] = {}
@@ -242,6 +246,8 @@ def build_recommendations(
         folder_seeds[fid] = seeds
         fname = folder_name_by_id.get(fid) or "(folder)"
         folder_queries[fid] = qgen.generate(folder_name=fname, seeds=seeds, n_queries=cfg.queries_per_folder, cross_domain=False)
+    if progress:
+        progress(f"Generated in-domain queries for {len(folder_ids)} folder(s).")
 
     cross_seeds = seed_selector.select(library, cfg.seeds_per_folder, rng=rng)
     cross_queries = qgen.generate(
@@ -250,6 +256,8 @@ def build_recommendations(
         n_queries=cfg.queries_per_folder,
         cross_domain=True,
     )
+    if progress:
+        progress("Generated cross-domain queries.")
 
     candidate_by_key: dict[str, dict] = {}
     candidate_keys_by_folder: dict[str, set[str]] = {fid: set() for fid in folder_ids}
@@ -268,7 +276,11 @@ def build_recommendations(
             keys.add(key)
 
     for fid in folder_ids:
+        if progress:
+            progress(f"Collecting candidates: folder={folder_name_by_id.get(fid) or fid}")
         for q in folder_queries.get(fid) or []:
+            if progress:
+                progress(f"Search: {q}")
             add_candidates(candidate_keys_by_folder[fid], search_papers(q, limit=cfg.search_limit, offset=0))
             time.sleep(cfg.polite_sleep_s)
 
@@ -276,12 +288,18 @@ def build_recommendations(
             doi = (s.get("doi") or "").strip()
             if not doi:
                 continue
+            if progress:
+                progress(f"References/Citations: doi={doi}")
             add_candidates(candidate_keys_by_folder[fid], fetch_references_by_doi(doi, limit=cfg.ref_limit, offset=0))
             time.sleep(cfg.polite_sleep_s)
             add_candidates(candidate_keys_by_folder[fid], fetch_citations_by_doi(doi, limit=cfg.citation_limit, offset=0))
             time.sleep(cfg.polite_sleep_s)
 
+    if progress:
+        progress("Collecting candidates: cross-domain")
     for q in cross_queries:
+        if progress:
+            progress(f"Search: {q}")
         add_candidates(cross_candidate_keys, search_papers(q, limit=cfg.search_limit, offset=0))
         time.sleep(cfg.polite_sleep_s)
 
@@ -289,6 +307,8 @@ def build_recommendations(
         doi = (s.get("doi") or "").strip()
         if not doi:
             continue
+        if progress:
+            progress(f"References/Citations: doi={doi}")
         add_candidates(cross_candidate_keys, fetch_references_by_doi(doi, limit=cfg.ref_limit, offset=0))
         time.sleep(cfg.polite_sleep_s)
         add_candidates(cross_candidate_keys, fetch_citations_by_doi(doi, limit=cfg.citation_limit, offset=0))
@@ -306,11 +326,18 @@ def build_recommendations(
     for fid in folder_ids:
         candidate_keys_by_folder[fid] = {k for k in candidate_keys_by_folder[fid] if not is_already_in_library(candidate_by_key[k])}
     cross_candidate_keys = {k for k in cross_candidate_keys if not is_already_in_library(candidate_by_key[k])}
+    if progress:
+        progress(
+            "Filtered candidates already in library: "
+            f"folders={sum(len(candidate_keys_by_folder[f]) for f in folder_ids)} cross={len(cross_candidate_keys)}"
+        )
 
     folder_texts: list[str] = [_paper_text(p) for p in library]
     folder_vecs = embedder.embed_passages(folder_texts)
     if len(folder_vecs) != len(folder_texts):
         raise RuntimeError("Embedding output count mismatch for library.")
+    if progress:
+        progress(f"Embedded library papers: {len(folder_vecs)}")
 
     folder_rep_by_id: dict[str, list[float]] = {}
     for fid in folder_ids:
@@ -322,6 +349,8 @@ def build_recommendations(
 
     all_candidate_keys = sorted({*cross_candidate_keys, *(set().union(*candidate_keys_by_folder.values()) if folder_ids else set())})
     candidate_texts = [_paper_text(candidate_by_key[k]) for k in all_candidate_keys]
+    if progress:
+        progress(f"Embedding candidates: {len(all_candidate_keys)}")
     candidate_vecs = embedder.embed_passages(candidate_texts)
     if len(candidate_vecs) != len(all_candidate_keys):
         raise RuntimeError("Embedding output count mismatch for candidates.")

@@ -107,13 +107,12 @@
 
 - 설치(예시):
   - `pip install -r requirements-dev.txt`
-  - `pip install sentence-transformers` (CUDA torch는 conda env에서 미리 설치 권장)
 - 실행(Windows PowerShell):
   - `$env:RUN_LOCAL_AI_TESTS="1"`
   - `pytest -q`
 - 옵션:
-  - `$env:LOCAL_EMBED_MODEL="intfloat/e5-base-v2"`
-  - `$env:LOCAL_EMBED_DEVICE="cuda"` (없으면 자동 선택)
+  - `OPENAI_API_KEY`가 필요합니다 (임베딩은 OpenAI 전용).
+  - `$env:OPENAI_EMBED_MODEL="text-embedding-3-large"`
   - `SEMANTIC_SCHOLAR_API_KEY`를 설정하면 rate limit에 더 안전합니다.
 - 테스트는 Semantic Scholar seed 결과를 `.pytest_cache/local_ai/semantic_scholar_seed.json`에 캐시합니다.
 
@@ -144,7 +143,7 @@
 
 ### 로컬 LLM(쿼리 생성) - Ollama 권장
 
-현재 로컬 LLM은 HuggingFace 대신 **Ollama**를 기본으로 사용합니다.
+로컬 LLM은 **Ollama**를 기본으로 사용합니다.
 
 - Ollama 실행: `ollama serve`
 - 모델 준비(예): `ollama pull gpt-oss-20b`
@@ -158,7 +157,6 @@
 
 - 기본값: `RECOMMENDER_DECIDER_LLM_PROVIDER=openai` + `OPENAI_API_KEY`, `OPENAI_MODEL`
 - 나중에 Ollama로 바꾸려면: `RECOMMENDER_DECIDER_LLM_PROVIDER=ollama` (또는 `local`)
-- HuggingFace(Transformers)로 바꾸려면: `RECOMMENDER_*_LLM_PROVIDER=hf` (+ `transformers`, `accelerate`, CUDA torch 설치)
 
 ### 실행
 

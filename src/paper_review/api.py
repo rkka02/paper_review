@@ -28,6 +28,7 @@ from paper_review.models import (
     PaperMetadata,
     RecommendationItem,
     RecommendationRun,
+    RecommendationTask,
     Review,
 )
 from paper_review.render import render_markdown
@@ -51,6 +52,8 @@ from paper_review.schemas import (
     RecommendationRunCreate,
     RecommendationRunOut,
     RecommendationItemOut,
+    RecommendationTaskCreate,
+    RecommendationTaskOut,
 )
 from paper_review.settings import settings
 
@@ -267,6 +270,10 @@ def get_db() -> Session:
 @app.on_event("startup")
 def _startup() -> None:
     init_db()
+    if settings.recommender_auto_run:
+        from paper_review.recommender.task_runner import start_recommender_scheduler
+
+        start_recommender_scheduler()
 
 
 @app.get("/health")
@@ -1031,6 +1038,62 @@ def get_latest_recommendations(db: Session = Depends(get_db)) -> RecommendationR
         created_at=run.created_at,
         items=[RecommendationItemOut.model_validate(it, from_attributes=True) for it in items],
     )
+
+
+@app.get(
+    "/api/recommendations/tasks/latest",
+    response_model=RecommendationTaskOut,
+    dependencies=[Depends(_require_auth)],
+)
+def get_latest_recommendation_task(db: Session = Depends(get_db)) -> RecommendationTaskOut:
+    task = (
+        db.execute(select(RecommendationTask).order_by(desc(RecommendationTask.created_at)).limit(1))
+        .scalars()
+        .first()
+    )
+    if not task:
+        raise HTTPException(status_code=404, detail="No recommendation tasks.")
+    return RecommendationTaskOut.model_validate(task, from_attributes=True)
+
+
+@app.get(
+    "/api/recommendations/tasks/{task_id}",
+    response_model=RecommendationTaskOut,
+    dependencies=[Depends(_require_auth)],
+)
+def get_recommendation_task(task_id: uuid.UUID, db: Session = Depends(get_db)) -> RecommendationTaskOut:
+    task = db.get(RecommendationTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return RecommendationTaskOut.model_validate(task, from_attributes=True)
+
+
+@app.post(
+    "/api/recommendations/tasks",
+    response_model=RecommendationTaskOut,
+    dependencies=[Depends(_require_auth)],
+)
+def start_recommendation_task(payload: RecommendationTaskCreate | None = None) -> RecommendationTaskOut:
+    from paper_review.recommender.task_runner import enqueue_recommendation_task
+
+    cfg: dict | None = None
+    if payload is not None:
+        cfg = {}
+        if payload.per_folder is not None:
+            cfg["per_folder"] = int(payload.per_folder)
+        if payload.cross_domain is not None:
+            cfg["cross_domain"] = int(payload.cross_domain)
+        if payload.random_seed is not None:
+            cfg["random_seed"] = int(payload.random_seed)
+        if not cfg:
+            cfg = None
+
+    task_id = enqueue_recommendation_task(trigger="manual", config=cfg)
+    with db_session() as db:
+        task = db.get(RecommendationTask, task_id)
+        if not task:
+            raise HTTPException(status_code=500, detail="Failed to create task.")
+        return RecommendationTaskOut.model_validate(task, from_attributes=True)
 
 
 @app.post(

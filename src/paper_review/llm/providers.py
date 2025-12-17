@@ -57,51 +57,6 @@ class OpenAIJsonLLM:
 
 
 @dataclass(slots=True)
-class HuggingFaceJsonLLM:
-    model: str = field(default_factory=lambda: settings.local_llm_model)
-    device_map: str = field(default_factory=lambda: settings.local_llm_device_map)
-    torch_dtype: str = field(default_factory=lambda: settings.local_llm_torch_dtype)
-    trust_remote_code: bool = field(default_factory=lambda: settings.local_llm_trust_remote_code)
-    max_new_tokens: int = field(default_factory=lambda: settings.local_llm_max_new_tokens)
-    temperature: float = field(default_factory=lambda: settings.local_llm_temperature)
-    top_p: float = field(default_factory=lambda: settings.local_llm_top_p)
-
-    provider: str = "local"
-    _impl: Any = field(init=False, repr=False)
-
-    def __post_init__(self) -> None:
-        from paper_review.local_ai.llm import HuggingFaceLLM
-
-        self._impl = HuggingFaceLLM(
-            model_name=self.model,
-            device_map=self.device_map,
-            torch_dtype=self.torch_dtype,
-            trust_remote_code=self.trust_remote_code,
-            max_new_tokens=self.max_new_tokens,
-            temperature=self.temperature,
-            top_p=self.top_p,
-        )
-
-    def generate_json(self, *, system: str, user: str, json_schema: dict[str, Any]) -> dict[str, Any]:
-        schema = (json_schema or {}).get("schema") or {}
-        hint = json.dumps(schema, ensure_ascii=False, indent=2)
-        system = (system or "").strip()
-        user = (user or "").strip()
-        msg = (
-            f"{user}\n\n"
-            "Output format:\n"
-            "- Output ONLY a JSON object.\n"
-            "- Do not wrap in ```.\n"
-            f"- Must follow this JSON Schema:\n{hint}\n"
-        )
-        raw = self._impl.generate(system=system, user=msg)
-        return _coerce_json_object(raw)
-
-
-LocalJsonLLM = HuggingFaceJsonLLM
-
-
-@dataclass(slots=True)
 class OllamaJsonLLM:
     model: str = field(default_factory=lambda: settings.local_llm_model)
     base_url: str = field(default_factory=lambda: settings.ollama_base_url)

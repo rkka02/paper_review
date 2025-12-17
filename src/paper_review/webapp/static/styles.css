@@ -1439,6 +1439,28 @@ html[data-theme="dark"] .graph-status {
   padding: 14px;
 }
 
+.recs-logs {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.035);
+  padding: 10px;
+}
+
+html[data-theme="dark"] .recs-logs {
+  background: rgba(231, 236, 255, 0.06);
+}
+
+.recs-logs-pre {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  max-height: 240px;
+  overflow: auto;
+}
+
 .recs-content {
   display: flex;
   flex-direction: column;

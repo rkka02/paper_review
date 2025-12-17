@@ -188,3 +188,22 @@ class RecommendationRunOut(BaseModel):
     meta: dict | None
     created_at: datetime
     items: list[RecommendationItemOut] = Field(default_factory=list)
+
+
+class RecommendationTaskCreate(BaseModel):
+    per_folder: int | None = Field(default=None, ge=1)
+    cross_domain: int | None = Field(default=None, ge=0)
+    random_seed: int | None = None
+
+
+class RecommendationTaskOut(BaseModel):
+    id: uuid.UUID
+    trigger: str
+    status: str
+    config: dict | None
+    logs: list[dict] | None
+    run_id: uuid.UUID | None
+    error: str | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
