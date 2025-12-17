@@ -101,15 +101,6 @@ html[data-theme="dark"] .topbar {
   font-size: 12px;
 }
 
-@supports (-webkit-background-clip: text) or (background-clip: text) {
-  .brand-name {
-    background: linear-gradient(90deg, var(--primary), var(--text));
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-}
-
 @media (max-width: 720px) {
   .topbar {
     flex-wrap: wrap;
