@@ -26,6 +26,9 @@ const refreshBtn = $("refreshBtn");
 const newFolderBtn = $("newFolderBtn");
 const paperSearch = $("paperSearch");
 const paperCount = $("paperCount");
+const paperPrevBtn = $("paperPrevBtn");
+const paperNextBtn = $("paperNextBtn");
+const paperPageInfo = $("paperPageInfo");
 const foldersList = $("foldersList");
 const papersList = $("papersList");
 
@@ -57,6 +60,11 @@ let pollHandle = null;
 let authEnabled = false;
 let paperSummaries = [];
 let paperById = new Map();
+const PAPER_PAGE_SIZE = 5;
+let paperPageIndex = 0;
+let lastPaperFilterKey = null;
+let lastPagerSelectedPaperId = null;
+let paperFilteredCache = [];
 let folders = [];
 let folderById = new Map();
 let selectedFolderMode = "all"; // all | unfiled | folder
@@ -2176,8 +2184,58 @@ async function logout() {
   await refreshSession();
 }
 
+function paperFilterKey(q) {
+  const folderKey =
+    selectedFolderMode === "folder" && selectedFolderId ? `folder:${selectedFolderId}` : selectedFolderMode;
+  return `${folderKey}|${q || ""}`;
+}
+
+function renderPaperPager(startIndex, endIndexExclusive, total) {
+  if (!paperPrevBtn || !paperNextBtn || !paperPageInfo) return;
+
+  const pages = total ? Math.ceil(total / PAPER_PAGE_SIZE) : 0;
+  const page = pages ? paperPageIndex + 1 : 0;
+
+  paperPrevBtn.disabled = !pages || paperPageIndex <= 0;
+  paperNextBtn.disabled = !pages || paperPageIndex >= pages - 1;
+
+  if (!total) {
+    paperPageInfo.textContent = "";
+    return;
+  }
+
+  const from = startIndex + 1;
+  const to = Math.min(total, endIndexExclusive);
+  paperPageInfo.textContent = `${from}-${to} / ${total} (page ${page}/${pages})`;
+}
+
+function renderPapersPaged(items) {
+  paperFilteredCache = items;
+  const total = items.length;
+  const pages = total ? Math.ceil(total / PAPER_PAGE_SIZE) : 0;
+
+  if (!pages) {
+    paperPageIndex = 0;
+    renderPaperPager(0, 0, 0);
+    renderPapers([]);
+    return;
+  }
+
+  paperPageIndex = clamp(paperPageIndex, 0, pages - 1);
+  const start = paperPageIndex * PAPER_PAGE_SIZE;
+  const end = start + PAPER_PAGE_SIZE;
+
+  renderPaperPager(start, end, total);
+  renderPapers(items.slice(start, end));
+}
+
 function applyPapersFilter() {
   const q = (paperSearch && paperSearch.value ? paperSearch.value : "").trim().toLowerCase();
+  const key = paperFilterKey(q);
+  if (key !== lastPaperFilterKey) {
+    paperPageIndex = 0;
+    lastPaperFilterKey = key;
+  }
 
   const scoped =
     selectedFolderMode === "unfiled"
@@ -2196,6 +2254,14 @@ function applyPapersFilter() {
         return hay.includes(q);
       });
 
+  if (selectedPaperId !== lastPagerSelectedPaperId) {
+    lastPagerSelectedPaperId = selectedPaperId;
+    if (selectedPaperId) {
+      const idx = filtered.findIndex((x) => x && x.paper && x.paper.id === selectedPaperId);
+      if (idx >= 0) paperPageIndex = Math.floor(idx / PAPER_PAGE_SIZE);
+    }
+  }
+
   if (paperCount) {
     const scopeLabel =
       selectedFolderMode === "all"
@@ -2206,7 +2272,7 @@ function applyPapersFilter() {
     const text = q ? `${filtered.length} / ${scoped.length}` : `${scoped.length}`;
     paperCount.textContent = `${text} papers • ${scopeLabel}`;
   }
-  renderPapers(filtered);
+  renderPapersPaged(filtered);
 }
 
 async function refreshPapers() {
@@ -2447,6 +2513,18 @@ async function main() {
     if (selectedPaperId) await loadDetails(selectedPaperId);
   });
   if (paperSearch) paperSearch.addEventListener("input", applyPapersFilter);
+  if (paperPrevBtn) {
+    paperPrevBtn.addEventListener("click", () => {
+      paperPageIndex -= 1;
+      renderPapersPaged(paperFilteredCache);
+    });
+  }
+  if (paperNextBtn) {
+    paperNextBtn.addEventListener("click", () => {
+      paperPageIndex += 1;
+      renderPapersPaged(paperFilteredCache);
+    });
+  }
   if (analyzeBtn) analyzeBtn.addEventListener("click", enqueueAnalyze);
   stopPollBtn.addEventListener("click", stopPolling);
 

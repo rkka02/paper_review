@@ -417,6 +417,18 @@ html[data-theme="dark"] .textarea {
   margin-top: 8px;
 }
 
+.paper-pager {
+  margin-top: 8px;
+  margin-bottom: 10px;
+  justify-content: space-between;
+}
+
+.paper-page-info {
+  font-size: 12px;
+  font-weight: 800;
+  user-select: none;
+}
+
 .folder-item {
   display: flex;
   align-items: center;
