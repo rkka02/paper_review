@@ -116,6 +116,7 @@ def apply_migrations(engine: Engine) -> None:
           authors jsonb,
           abstract text,
           score double precision,
+          one_liner text,
           summary text,
           rationale jsonb,
           created_at timestamptz not null default now()
@@ -134,6 +135,7 @@ def apply_migrations(engine: Engine) -> None:
         "alter table recommendation_items add column if not exists authors jsonb;",
         "alter table recommendation_items add column if not exists abstract text;",
         "alter table recommendation_items add column if not exists score double precision;",
+        "alter table recommendation_items add column if not exists one_liner text;",
         "alter table recommendation_items add column if not exists summary text;",
         "alter table recommendation_items add column if not exists rationale jsonb;",
         "alter table recommendation_items add column if not exists created_at timestamptz;",

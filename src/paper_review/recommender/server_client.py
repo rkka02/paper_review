@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from paper_review.schemas import RecommendationRunCreate, RecommendationRunOut
+from paper_review.schemas import PaperEmbeddingsUpsert, RecommendationRunCreate, RecommendationRunOut
 
 
 def _headers(api_key: str | None) -> dict[str, str]:
@@ -76,6 +76,31 @@ class ServerClient:
         data = r.json()
         if not isinstance(data, list):
             raise RuntimeError("Unexpected /api/papers/summary response.")
+        return data
+
+    def fetch_missing_paper_embeddings(self, *, provider: str, model: str) -> list[str]:
+        prov = (provider or "").strip()
+        mdl = (model or "").strip()
+        r = self._client.get(
+            _url(self.base_url, "/api/paper-embeddings/missing"),
+            params={"provider": prov, "model": mdl},
+        )
+        r.raise_for_status()
+        data = r.json()
+        if not isinstance(data, list):
+            raise RuntimeError("Unexpected /api/paper-embeddings/missing response.")
+        return [str(x) for x in data if str(x).strip()]
+
+    def upsert_paper_embeddings(self, payload: PaperEmbeddingsUpsert) -> dict:
+        r = self._client.post(
+            _url(self.base_url, "/api/paper-embeddings/batch"),
+            headers={"Content-Type": "application/json"},
+            json=payload.model_dump(mode="json"),
+        )
+        r.raise_for_status()
+        data = r.json()
+        if not isinstance(data, dict):
+            raise RuntimeError("Unexpected /api/paper-embeddings/batch response.")
         return data
 
     def upload_recommendations(self, payload: RecommendationRunCreate) -> RecommendationRunOut:

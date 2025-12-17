@@ -152,6 +152,7 @@
   - `RECOMMENDER_QUERY_LLM_PROVIDER=ollama` (또는 `local`)
   - `OLLAMA_BASE_URL=http://127.0.0.1:11434`
   - `LOCAL_LLM_MODEL=gpt-oss-20b`
+  - (OpenAI로 쿼리 생성도 가능) `RECOMMENDER_QUERY_LLM_PROVIDER=openai` + `OPENAI_API_KEY`, `OPENAI_MODEL`
 
 ### 최종 선택 LLM(OpenAI → 나중에 로컬로 교체 가능)
 

@@ -1540,6 +1540,9 @@ function renderRecs(run) {
     for (const it of items) {
       const itemEl = createEl("div", { className: "recs-item" });
       const titleEl = createEl("div", { className: "recs-title" });
+      const rank = Number(it?.rank || 0);
+      const rankEl = rank > 0 ? createEl("span", { className: "badge recs-rank", text: `#${rank}` }) : null;
+      if (rankEl) titleEl.appendChild(rankEl);
       const link = String(it?.url || "").trim();
       if (link) {
         titleEl.appendChild(
@@ -1549,7 +1552,7 @@ function renderRecs(run) {
           }),
         );
       } else {
-        titleEl.textContent = String(it?.title || "(untitled)");
+        titleEl.appendChild(createEl("span", { text: String(it?.title || "(untitled)") }));
       }
 
       const metaParts = [];
@@ -1560,12 +1563,44 @@ function renderRecs(run) {
 
       const metaEl = createEl("div", { className: "recs-meta muted", text: metaParts.join(" | ") });
 
-      const summaryText = String(it?.summary || "").trim() || clipText(it?.abstract, 220);
-      const summaryEl = createEl("div", { className: "recs-summary", text: summaryText });
+      const oneLinerText = String(it?.one_liner || "").trim();
+      const oneLinerEl = oneLinerText ? createEl("div", { className: "recs-oneliner", text: oneLinerText }) : null;
+
+      const summaryText = String(it?.summary || "").trim();
+      const summaryEl = summaryText ? createEl("div", { className: "recs-summary", text: summaryText }) : null;
+
+      const abstractText = String(it?.abstract || "").trim();
+      const abstractMax = 420;
+      const abstractNeedsToggle = abstractText && abstractText.length > abstractMax;
+      let abstractExpanded = false;
+      const abstractBody = abstractText
+        ? createEl("div", { className: "recs-abstract-text", text: clipText(abstractText, abstractMax) })
+        : null;
+      const abstractBtn = abstractNeedsToggle
+        ? createEl("button", { className: "btn btn-ghost btn-small", text: "펼치기" })
+        : null;
+      const abstractEl = abstractText ? createEl("div", { className: "recs-abstract" }) : null;
+
+      if (abstractEl && abstractBody) {
+        abstractEl.appendChild(abstractBody);
+        if (abstractBtn) {
+          abstractBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            abstractExpanded = !abstractExpanded;
+            abstractBody.textContent = abstractExpanded ? abstractText : clipText(abstractText, abstractMax);
+            abstractBtn.textContent = abstractExpanded ? "접기" : "펼치기";
+          });
+          const actions = createEl("div", { className: "recs-abstract-actions" });
+          actions.appendChild(abstractBtn);
+          abstractEl.appendChild(actions);
+        }
+      }
 
       itemEl.appendChild(titleEl);
       if (metaParts.length) itemEl.appendChild(metaEl);
-      if (summaryText) itemEl.appendChild(summaryEl);
+      if (oneLinerEl) itemEl.appendChild(oneLinerEl);
+      if (summaryEl) itemEl.appendChild(summaryEl);
+      if (abstractEl) itemEl.appendChild(abstractEl);
       groupEl.appendChild(itemEl);
     }
 

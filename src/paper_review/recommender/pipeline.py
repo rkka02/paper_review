@@ -136,6 +136,7 @@ def _decide_topk(
         "- Prefer novelty + usefulness.\n"
         "- Avoid near-duplicates.\n"
         "- Keep summaries short (1 sentence).\n"
+        "- Provide a 1-sentence one_liner explaining why this is recommended for the group.\n"
         "- Reasons should be 2–3 short bullet strings.\n\n"
         f"Candidates (JSON):\n{json.dumps(rows, ensure_ascii=False)}\n"
     )
@@ -151,9 +152,10 @@ def _decide_topk(
                         "properties": {
                             "id": {"type": "string"},
                             "summary": {"type": "string"},
+                            "one_liner": {"type": "string"},
                             "reasons": {"type": "array", "items": {"type": "string"}, "minItems": 1},
                         },
-                        "required": ["id", "summary", "reasons"],
+                        "required": ["id", "summary", "one_liner", "reasons"],
                         "additionalProperties": False,
                     },
                     "minItems": k,
@@ -181,6 +183,7 @@ def _decide_topk(
                 continue
             base = dict(by_id[pid])
             base["llm_summary"] = (p.get("summary") or "").strip() or None
+            base["llm_one_liner"] = (p.get("one_liner") or "").strip() or None
             reasons = p.get("reasons")
             if isinstance(reasons, list):
                 base["llm_reasons"] = [str(x) for x in reasons if str(x).strip()]
@@ -398,6 +401,11 @@ def build_recommendations(
         )
         folder_uuid = _safe_uuid(fid)
         for idx, c in enumerate(chosen, start=1):
+            one_liner = (c.get("llm_one_liner") or "").strip() or None
+            if not one_liner:
+                reasons = c.get("llm_reasons") or []
+                if isinstance(reasons, list):
+                    one_liner = "; ".join([str(x).strip() for x in reasons if str(x).strip()][:2]) or None
             items.append(
                 RecommendationItemIn(
                     kind="folder",
@@ -412,6 +420,7 @@ def build_recommendations(
                     authors=c.get("authors"),
                     abstract=_clip(c.get("abstract"), 1500),
                     score=float(c.get("score")) if c.get("score") is not None else None,
+                    one_liner=one_liner,
                     summary=(c.get("llm_summary") or None),
                     rationale={"reasons": c.get("llm_reasons")} if c.get("llm_reasons") else None,
                 )
@@ -426,6 +435,11 @@ def build_recommendations(
             mode="cross-domain",
         )
         for idx, c in enumerate(chosen, start=1):
+            one_liner = (c.get("llm_one_liner") or "").strip() or None
+            if not one_liner:
+                reasons = c.get("llm_reasons") or []
+                if isinstance(reasons, list):
+                    one_liner = "; ".join([str(x).strip() for x in reasons if str(x).strip()][:2]) or None
             items.append(
                 RecommendationItemIn(
                     kind="cross_domain",
@@ -440,6 +454,7 @@ def build_recommendations(
                     authors=c.get("authors"),
                     abstract=_clip(c.get("abstract"), 1500),
                     score=float(c.get("score")) if c.get("score") is not None else None,
+                    one_liner=one_liner,
                     summary=(c.get("llm_summary") or None),
                     rationale={"reasons": c.get("llm_reasons"), "top_folders": c.get("top_folders")}
                     if (c.get("llm_reasons") or c.get("top_folders"))

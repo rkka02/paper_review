@@ -81,6 +81,17 @@ class PaperSummaryOut(BaseModel):
     latest_run: AnalysisRunOut | None = None
 
 
+class PaperEmbeddingVectorIn(BaseModel):
+    paper_id: uuid.UUID
+    vector: list[float]
+
+
+class PaperEmbeddingsUpsert(BaseModel):
+    provider: str
+    model: str
+    vectors: list[PaperEmbeddingVectorIn] = Field(default_factory=list)
+
+
 class PaperLinkCreate(BaseModel):
     other_paper_id: uuid.UUID
 
@@ -136,6 +147,7 @@ class RecommendationItemIn(BaseModel):
     abstract: str | None = None
 
     score: float | None = None
+    one_liner: str | None = None
     summary: str | None = None
     rationale: dict | None = None
 
@@ -163,6 +175,7 @@ class RecommendationItemOut(BaseModel):
     abstract: str | None
 
     score: float | None
+    one_liner: str | None
     summary: str | None
     rationale: dict | None
 

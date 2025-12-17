@@ -193,6 +193,8 @@ def recommend(
     api_key: str | None = typer.Option(None, help="Server API key (default: SERVER_API_KEY or API_KEY)."),
     web_username: str | None = typer.Option(None, help="Web login username (session-based auth)."),
     web_password: str | None = typer.Option(None, help="Web login password (session-based auth)."),
+    sync_embeddings: bool = typer.Option(True, help="Fill missing paper embeddings on the server before recommending."),
+    sync_embeddings_batch: int = typer.Option(64, help="Batch size for embedding upload when syncing."),
     per_folder: int = typer.Option(3, help="Recommendations per folder."),
     cross_domain: int = typer.Option(3, help="Cross-domain recommendations."),
     seeds_per_folder: int = typer.Option(5, help="Random seeds per folder."),
@@ -232,6 +234,28 @@ def recommend(
 
     from paper_review.recommender import RecommenderConfig, build_recommendations
     from paper_review.recommender.server_client import ServerClient
+    from paper_review.embeddings import get_embedder
+    from paper_review.schemas import PaperEmbeddingVectorIn, PaperEmbeddingsUpsert
+
+    def paper_text_for_embedding(paper: dict) -> str:
+        title = (paper.get("title") or "").strip()
+        doi = (paper.get("doi") or "").strip()
+        abstract = (paper.get("abstract") or "").strip()
+        parts: list[str] = []
+        if title:
+            parts.append(f"Title: {title}")
+        if doi:
+            parts.append(f"DOI: {doi}")
+        if abstract:
+            parts.append(f"Abstract: {abstract}")
+        if not parts:
+            pid = str(paper.get("id") or "").strip()
+            return f"Paper {pid}" if pid else "Paper"
+        return "\n".join(parts)
+
+    embedder = get_embedder()
+    embed_provider = getattr(embedder, "provider", "unknown")
+    embed_model = getattr(embedder, "model", "unknown")
 
     try:
         with ServerClient(
@@ -243,6 +267,43 @@ def recommend(
         ) as client:
             folders = client.fetch_folders()
             paper_summaries = client.fetch_papers_summary()
+
+            if sync_embeddings and not dry_run:
+                missing_ids = client.fetch_missing_paper_embeddings(
+                    provider=str(embed_provider),
+                    model=str(embed_model),
+                )
+                paper_by_id = {}
+                for row in paper_summaries:
+                    p = (row or {}).get("paper") if isinstance(row, dict) else None
+                    if not isinstance(p, dict):
+                        continue
+                    pid = str(p.get("id") or "").strip()
+                    if pid:
+                        paper_by_id[pid] = p
+                todo = [pid for pid in missing_ids if pid in paper_by_id]
+                if todo:
+                    texts = [paper_text_for_embedding(paper_by_id[pid]) for pid in todo]
+                    vecs = embedder.embed_passages(texts)
+                    if len(vecs) != len(todo):
+                        raise RuntimeError("Embedding output count mismatch (sync).")
+
+                    bs = max(1, int(sync_embeddings_batch))
+                    upserts_total = 0
+                    for i in range(0, len(todo), bs):
+                        chunk_ids = todo[i : i + bs]
+                        chunk_vecs = vecs[i : i + bs]
+                        payload = PaperEmbeddingsUpsert(
+                            provider=str(embed_provider),
+                            model=str(embed_model),
+                            vectors=[
+                                PaperEmbeddingVectorIn(paper_id=pid, vector=vec)
+                                for pid, vec in zip(chunk_ids, chunk_vecs, strict=True)
+                            ],
+                        )
+                        res = client.upsert_paper_embeddings(payload)
+                        upserts_total += int(res.get("upserts") or 0)
+                    print(f"[green]OK[/green] synced {upserts_total} paper embeddings ({embed_provider}/{embed_model}).")
 
             seed_selector_key = (seed_selector or "").strip().lower()
             if seed_selector_key != "random":
@@ -262,6 +323,7 @@ def recommend(
                     search_limit=search_limit,
                 ),
                 seed_selector=RandomSeedSelector(),
+                embedder=embedder,
             )
 
             payload_json = payload.model_dump(mode="json")

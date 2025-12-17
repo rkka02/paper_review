@@ -294,6 +294,7 @@ class RecommendationItem(Base):
     abstract: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    one_liner: Mapped[str | None] = mapped_column(Text, nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     rationale: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 

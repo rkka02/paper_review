@@ -23,6 +23,7 @@ from paper_review.models import (
     EvidenceSnippet,
     Folder,
     Paper,
+    PaperEmbedding,
     PaperLink,
     PaperMetadata,
     RecommendationItem,
@@ -46,6 +47,7 @@ from paper_review.schemas import (
     PaperSummaryOut,
     PaperUpdate,
     ReviewUpsert,
+    PaperEmbeddingsUpsert,
     RecommendationRunCreate,
     RecommendationRunOut,
     RecommendationItemOut,
@@ -615,6 +617,86 @@ def list_papers_summary(
     return out
 
 
+@app.get(
+    "/api/paper-embeddings/missing",
+    response_model=list[uuid.UUID],
+    dependencies=[Depends(_require_auth)],
+)
+def list_missing_paper_embeddings(
+    db: Session = Depends(get_db),
+    provider: str | None = Query(default=None),
+    model: str | None = Query(default=None),
+) -> list[uuid.UUID]:
+    prov = (provider or "").strip() or None
+    mdl = (model or "").strip() or None
+
+    stmt = select(Paper.id).outerjoin(PaperEmbedding, PaperEmbedding.paper_id == Paper.id)
+    if prov and mdl:
+        stmt = stmt.where(
+            (PaperEmbedding.paper_id.is_(None))
+            | (PaperEmbedding.provider != prov)
+            | (PaperEmbedding.model != mdl)
+        )
+    else:
+        stmt = stmt.where(PaperEmbedding.paper_id.is_(None))
+
+    return list(db.execute(stmt).scalars().all())
+
+
+@app.post(
+    "/api/paper-embeddings/batch",
+    response_model=dict,
+    dependencies=[Depends(_require_auth)],
+)
+def upsert_paper_embeddings(payload: PaperEmbeddingsUpsert, db: Session = Depends(get_db)) -> dict:
+    provider = (payload.provider or "").strip()
+    model = (payload.model or "").strip()
+    if not provider or not model:
+        raise HTTPException(status_code=400, detail="provider and model are required.")
+
+    vectors = payload.vectors or []
+    if not vectors:
+        return {"ok": True, "upserts": 0, "provider": provider, "model": model, "dim": 0}
+
+    dim = len(vectors[0].vector or [])
+    if dim <= 0:
+        raise HTTPException(status_code=400, detail="vector cannot be empty.")
+
+    for v in vectors:
+        if len(v.vector) != dim:
+            raise HTTPException(status_code=400, detail="vector dim mismatch in request.")
+
+    ids = [v.paper_id for v in vectors]
+    existing = set(db.execute(select(Paper.id).where(Paper.id.in_(ids))).scalars().all())
+    missing = [str(pid) for pid in ids if pid not in existing]
+    if missing:
+        extra = f" (+{len(missing) - 10} more)" if len(missing) > 10 else ""
+        raise HTTPException(status_code=400, detail=f"Unknown paper_id(s): {', '.join(missing[:10])}{extra}")
+
+    upserts = 0
+    for v in vectors:
+        row = db.get(PaperEmbedding, v.paper_id)
+        if row is None:
+            db.add(
+                PaperEmbedding(
+                    paper_id=v.paper_id,
+                    provider=provider,
+                    model=model,
+                    dim=dim,
+                    vector=[float(x) for x in v.vector],
+                )
+            )
+        else:
+            row.provider = provider
+            row.model = model
+            row.dim = dim
+            row.vector = [float(x) for x in v.vector]
+        upserts += 1
+
+    db.flush()
+    return {"ok": True, "upserts": upserts, "provider": provider, "model": model, "dim": dim}
+
+
 @app.post("/api/papers/upload", response_model=PaperOut, dependencies=[Depends(_require_auth)])
 async def upload_paper_pdf(
     request: Request,
@@ -977,6 +1059,7 @@ def create_recommendations(payload: RecommendationRunCreate, db: Session = Depen
                 authors=item.authors,
                 abstract=(item.abstract or "").strip() or None,
                 score=float(item.score) if item.score is not None else None,
+                one_liner=(item.one_liner or "").strip() or None,
                 summary=(item.summary or "").strip() or None,
                 rationale=item.rationale,
             )

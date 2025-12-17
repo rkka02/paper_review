@@ -176,6 +176,7 @@ create table if not exists recommendation_items (
   authors jsonb,
   abstract text,
   score double precision,
+  one_liner text,
   summary text,
   rationale jsonb,
   created_at timestamptz not null default now()
