@@ -325,7 +325,7 @@ class GoogleJsonLLM:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent"
 
         base_generation_config: dict[str, Any] = {
-            "temperature": 0.2,
+            "temperature": 1.0,
             "maxOutputTokens": int(self.max_output_tokens),
             "responseMimeType": "application/json",
         }
@@ -353,7 +353,7 @@ class GoogleJsonLLM:
                 gen_with_schema,
                 base_generation_config,  # retry without responseSchema (schema dialect mismatch)
                 {
-                    "temperature": 0.2,
+                    "temperature": 1.0,
                     "maxOutputTokens": int(self.max_output_tokens),
                 },  # retry without responseMimeType/responseSchema
             ]:
