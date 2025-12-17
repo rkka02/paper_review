@@ -1425,7 +1425,16 @@ function closeGraph() {
     cancelAnimationFrame(graphState.rafId);
     graphState.rafId = null;
   }
-  if (graphState) graphState.running = false;
+  if (graphState) {
+    graphState.running = false;
+    graphState.dragging = false;
+    graphState.dragMode = null;
+    graphState.dragPointerId = null;
+    graphState.dragNode = null;
+    if (graphState.pointers) graphState.pointers.clear();
+    graphState.hoverId = null;
+    if (graphState.canvas) graphState.canvas.style.cursor = "grab";
+  }
   window.removeEventListener("resize", onGraphResize);
   window.removeEventListener("keydown", onGraphKeydown, true);
 }
@@ -1447,6 +1456,10 @@ function hashHue(text) {
   return h % 360;
 }
 
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
 function ensureGraphState() {
   if (!graphOverlay || !graphCanvas) return null;
   if (graphState) return graphState;
@@ -1466,8 +1479,10 @@ function ensureGraphState() {
     nodes: [],
     edges: [],
     nodeById: new Map(),
+    pointers: new Map(),
     dragging: false,
     dragMode: null,
+    dragPointerId: null,
     dragNode: null,
     dragStartX: 0,
     dragStartY: 0,
@@ -1475,11 +1490,18 @@ function ensureGraphState() {
     dragPanY: 0,
     dragNodeOffsetX: 0,
     dragNodeOffsetY: 0,
+    pinchStartDist: 0,
+    pinchStartScale: 1,
+    pinchWorldX: 0,
+    pinchWorldY: 0,
     moved: false,
     hoverId: null,
     highlightId: null,
     rafId: null,
     running: false,
+    userInteracted: false,
+    lastFilterKey: null,
+    filterLabel: "All papers",
     colors: graphCssColors(),
     theme: currentTheme(),
   };
@@ -1489,14 +1511,14 @@ function ensureGraphState() {
     return { x: (sx - st.panX) / st.scale, y: (sy - st.panY) / st.scale };
   };
 
-  const pickNode = (sx, sy) => {
+  const pickNode = (sx, sy, hitSlop = 0) => {
     const st = graphState;
     let best = null;
     let bestD2 = Infinity;
     for (const n of st.nodes) {
       const px = n.x * st.scale + st.panX;
       const py = n.y * st.scale + st.panY;
-      const r = Math.max(6, Math.min(26, n.r * st.scale));
+      const r = Math.max(6, Math.min(26, n.r * st.scale)) + hitSlop;
       const dx = px - sx;
       const dy = py - sy;
       const d2 = dx * dx + dy * dy;
@@ -1508,80 +1530,196 @@ function ensureGraphState() {
     return best;
   };
 
-  const onDown = (e) => {
-    if (!isGraphOpen()) return;
+  const localPos = (e) => {
     const st = graphState;
     const rect = st.canvas.getBoundingClientRect();
-    const sx = e.clientX - rect.left;
-    const sy = e.clientY - rect.top;
-    const hit = pickNode(sx, sy);
+    return { sx: e.clientX - rect.left, sy: e.clientY - rect.top };
+  };
+
+  const startSingleDrag = (pointerId) => {
+    const st = graphState;
+    const p = st.pointers.get(pointerId);
+    if (!p) return;
+
+    const hitSlop = p.type === "touch" ? 14 : p.type === "pen" ? 8 : 0;
+    const hit = pickNode(p.x, p.y, hitSlop);
+
     st.dragging = true;
     st.moved = false;
-    st.dragStartX = sx;
-    st.dragStartY = sy;
+    st.dragMode = hit ? "node" : "pan";
+    st.dragPointerId = pointerId;
+    st.dragNode = hit || null;
+    st.dragStartX = p.x;
+    st.dragStartY = p.y;
     st.dragPanX = st.panX;
     st.dragPanY = st.panY;
+
     if (hit) {
-      st.dragMode = "node";
-      st.dragNode = hit;
-      const w = screenToWorld(sx, sy);
+      const w = screenToWorld(p.x, p.y);
       st.dragNodeOffsetX = hit.x - w.x;
       st.dragNodeOffsetY = hit.y - w.y;
-    } else {
-      st.dragMode = "pan";
-      st.dragNode = null;
-      graphOverlay.classList.add("dragging");
     }
+
+    graphOverlay.classList.add("dragging");
+  };
+
+  const startPinch = () => {
+    const st = graphState;
+    if (st.pointers.size < 2) return;
+    const pts = Array.from(st.pointers.values());
+    const a = pts[0];
+    const b = pts[1];
+
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const midX = (a.x + b.x) / 2;
+    const midY = (a.y + b.y) / 2;
+
+    st.dragging = true;
+    st.dragMode = "pinch";
+    st.dragPointerId = null;
+    st.dragNode = null;
+
+    st.pinchStartDist = dist;
+    st.pinchStartScale = st.scale;
+    st.pinchWorldX = (midX - st.panX) / st.scale;
+    st.pinchWorldY = (midY - st.panY) / st.scale;
+
+    graphOverlay.classList.add("dragging");
+  };
+
+  const onPointerDown = (e) => {
+    if (!isGraphOpen()) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    const st = graphState;
+
+    const { sx, sy } = localPos(e);
+    st.pointers.set(e.pointerId, { id: e.pointerId, x: sx, y: sy, type: e.pointerType });
+
+    try {
+      st.canvas.setPointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+
+    if (st.pointers.size === 1) startSingleDrag(e.pointerId);
+    else if (st.pointers.size === 2) startPinch();
+
     e.preventDefault();
   };
 
-  const onMove = (e) => {
+  const onPointerMove = (e) => {
     if (!isGraphOpen()) return;
     const st = graphState;
-    const rect = st.canvas.getBoundingClientRect();
-    const sx = e.clientX - rect.left;
-    const sy = e.clientY - rect.top;
+    const { sx, sy } = localPos(e);
 
-    if (st.dragging) {
-      const dx = sx - st.dragStartX;
-      const dy = sy - st.dragStartY;
-      if (Math.abs(dx) + Math.abs(dy) > 2) st.moved = true;
+    const tracked = st.pointers.get(e.pointerId) || null;
+    if (tracked) {
+      tracked.x = sx;
+      tracked.y = sy;
+    }
 
-      if (st.dragMode === "pan") {
-        st.panX = st.dragPanX + dx;
-        st.panY = st.dragPanY + dy;
-      } else if (st.dragMode === "node" && st.dragNode) {
-        const w = screenToWorld(sx, sy);
-        st.dragNode.x = w.x + st.dragNodeOffsetX;
-        st.dragNode.y = w.y + st.dragNodeOffsetY;
-        st.dragNode.vx = 0;
-        st.dragNode.vy = 0;
+    if (!st.dragging) {
+      if (e.pointerType === "mouse") {
+        const hit = pickNode(sx, sy, 0);
+        st.hoverId = hit ? hit.id : null;
+        st.canvas.style.cursor = hit ? "pointer" : "grab";
       }
       return;
     }
 
-    const hit = pickNode(sx, sy);
-    st.hoverId = hit ? hit.id : null;
-    st.canvas.style.cursor = hit ? "pointer" : "grab";
+    if (st.dragMode === "pinch") {
+      if (st.pointers.size < 2) return;
+      const pts = Array.from(st.pointers.values());
+      const a = pts[0];
+      const b = pts[1];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const midX = (a.x + b.x) / 2;
+      const midY = (a.y + b.y) / 2;
+
+      const factor = dist / (st.pinchStartDist || 1);
+      const nextScale = clamp(st.pinchStartScale * factor, 0.2, 3.5);
+      st.scale = nextScale;
+      st.panX = midX - st.pinchWorldX * nextScale;
+      st.panY = midY - st.pinchWorldY * nextScale;
+      st.userInteracted = true;
+      st.moved = true;
+      e.preventDefault();
+      return;
+    }
+
+    if (!tracked || st.dragPointerId !== e.pointerId) return;
+
+    const dx = sx - st.dragStartX;
+    const dy = sy - st.dragStartY;
+    if (Math.abs(dx) + Math.abs(dy) > 2) st.moved = true;
+
+    if (st.dragMode === "pan") {
+      st.panX = st.dragPanX + dx;
+      st.panY = st.dragPanY + dy;
+      st.userInteracted = true;
+    } else if (st.dragMode === "node" && st.dragNode) {
+      const w = screenToWorld(sx, sy);
+      st.dragNode.x = w.x + st.dragNodeOffsetX;
+      st.dragNode.y = w.y + st.dragNodeOffsetY;
+      st.dragNode.vx = 0;
+      st.dragNode.vy = 0;
+      st.userInteracted = true;
+    }
+
+    e.preventDefault();
   };
 
-  const onUp = async (e) => {
+  const onPointerUp = async (e) => {
     if (!isGraphOpen()) return;
     const st = graphState;
-    const wasDraggingNode = st.dragMode === "node" && st.dragNode;
-    const clickedNode = wasDraggingNode && !st.moved ? st.dragNode : null;
 
-    st.dragging = false;
-    st.dragMode = null;
-    st.dragNode = null;
-    graphOverlay.classList.remove("dragging");
+    const clickedNode =
+      st.dragMode === "node" && st.dragPointerId === e.pointerId && st.dragNode && !st.moved
+        ? st.dragNode
+        : null;
 
-    if (clickedNode) {
+    st.pointers.delete(e.pointerId);
+    try {
+      st.canvas.releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+
+    if (st.pointers.size === 0) {
+      st.dragging = false;
+      st.dragMode = null;
+      st.dragPointerId = null;
+      st.dragNode = null;
+      graphOverlay.classList.remove("dragging");
+    } else if (st.pointers.size === 1) {
+      const [remainingId] = st.pointers.keys();
+      const p = st.pointers.get(remainingId);
+      st.dragging = true;
+      st.dragMode = "pan";
+      st.dragPointerId = remainingId;
+      st.dragNode = null;
+      st.moved = false;
+      st.dragStartX = p.x;
+      st.dragStartY = p.y;
+      st.dragPanX = st.panX;
+      st.dragPanY = st.panY;
+      graphOverlay.classList.add("dragging");
+    } else if (st.pointers.size >= 2) {
+      startPinch();
+    }
+
+    if (clickedNode && st.pointers.size === 0) {
       closeGraph();
       selectedPaperId = clickedNode.id;
       applyPapersFilter();
       await loadDetails(clickedNode.id);
     }
+
+    e.preventDefault();
   };
 
   const onWheel = (e) => {
@@ -1591,21 +1729,29 @@ function ensureGraphState() {
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
 
-    const delta = Math.max(-120, Math.min(120, e.deltaY));
+    const delta = clamp(e.deltaY, -120, 120);
     const factor = delta < 0 ? 1.12 : 1 / 1.12;
 
     const wx = (sx - st.panX) / st.scale;
     const wy = (sy - st.panY) / st.scale;
-    const nextScale = Math.max(0.2, Math.min(3.5, st.scale * factor));
+    const nextScale = clamp(st.scale * factor, 0.2, 3.5);
     st.scale = nextScale;
     st.panX = sx - wx * st.scale;
     st.panY = sy - wy * st.scale;
+    st.userInteracted = true;
     e.preventDefault();
   };
 
-  graphCanvas.addEventListener("mousedown", onDown);
-  window.addEventListener("mousemove", onMove);
-  window.addEventListener("mouseup", onUp);
+  graphCanvas.addEventListener("pointerdown", onPointerDown);
+  graphCanvas.addEventListener("pointermove", onPointerMove);
+  graphCanvas.addEventListener("pointerup", onPointerUp);
+  graphCanvas.addEventListener("pointercancel", onPointerUp);
+  graphCanvas.addEventListener("pointerleave", () => {
+    const st = graphState;
+    if (!st || st.dragging) return;
+    st.hoverId = null;
+    st.canvas.style.cursor = "grab";
+  });
   graphCanvas.addEventListener("wheel", onWheel, { passive: false });
 
   return graphState;
@@ -1623,9 +1769,13 @@ function onGraphResize() {
   st.canvas.height = Math.max(1, Math.floor(rect.height * dpr));
   st.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  if (!st.panX && !st.panY) {
-    st.panX = rect.width / 2;
-    st.panY = rect.height / 2;
+  if (!st.userInteracted) {
+    if (st.nodes && st.nodes.length) graphZoomToFit();
+    else {
+      st.scale = 1;
+      st.panX = rect.width / 2;
+      st.panY = rect.height / 2;
+    }
   }
 }
 
@@ -1695,7 +1845,10 @@ function graphSetData(graph) {
   st.nodeById = nodeById;
   st.highlightId = selectedPaperId ? String(selectedPaperId) : null;
 
-  if (graphStatus) graphStatus.textContent = `${nodes.length} nodes · ${edges.length} edges`;
+  if (graphStatus) {
+    const prefix = st.filterLabel ? `${st.filterLabel} | ` : "";
+    graphStatus.textContent = `${prefix}${nodes.length} nodes | ${edges.length} edges`;
+  }
 }
 
 function graphStep() {
@@ -1842,15 +1995,82 @@ function graphCenterOnNode(node) {
   st.panY = st.height / 2 - node.y * st.scale;
 }
 
+function graphZoomToFit(padding = 56) {
+  const st = graphState;
+  if (!st || !st.nodes || !st.nodes.length) return;
+
+  const pad = Math.max(16, Number(padding) || 0);
+  const availW = Math.max(40, st.width - pad * 2);
+  const availH = Math.max(40, st.height - pad * 2);
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+
+  for (const n of st.nodes) {
+    const r = (n.r || 0) + 10;
+    minX = Math.min(minX, n.x - r);
+    maxX = Math.max(maxX, n.x + r);
+    minY = Math.min(minY, n.y - r);
+    maxY = Math.max(maxY, n.y + r);
+  }
+
+  const w = maxX - minX;
+  const h = maxY - minY;
+  if (!(w > 0) || !(h > 0)) return;
+
+  const nextScale = clamp(Math.min(availW / w, availH / h), 0.2, 3.5);
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+
+  st.scale = nextScale;
+  st.panX = st.width / 2 - cx * nextScale;
+  st.panY = st.height / 2 - cy * nextScale;
+}
+
+function graphCurrentFilter() {
+  if (selectedFolderMode === "folder" && selectedFolderId) {
+    const name = folderName(selectedFolderId) || "Folder";
+    return { key: `folder:${selectedFolderId}`, label: `Folder: ${name}`, kind: "folder", folderId: selectedFolderId };
+  }
+  if (selectedFolderMode === "unfiled") {
+    return { key: "unfiled", label: "Unfiled", kind: "unfiled", folderId: null };
+  }
+  return { key: "all", label: "All papers", kind: "all", folderId: null };
+}
+
+function graphFilterGraph(graph, filter) {
+  const nodesIn = asArray(graph?.nodes);
+  const edgesIn = asArray(graph?.edges);
+
+  let nodes = nodesIn;
+  if (filter?.kind === "folder" && filter.folderId) {
+    nodes = nodesIn.filter((n) => n && n.folder_id === filter.folderId);
+  } else if (filter?.kind === "unfiled") {
+    nodes = nodesIn.filter((n) => n && !n.folder_id);
+  }
+
+  const allowed = new Set(nodes.map((n) => String(n.id || "")).filter(Boolean));
+  const edges = edgesIn.filter((e) => {
+    const a = String(e?.a_paper_id || "");
+    const b = String(e?.b_paper_id || "");
+    return allowed.has(a) && allowed.has(b);
+  });
+
+  return { nodes, edges };
+}
+
 function graphApplySearch(query, opts = {}) {
   const st = graphState;
   if (!st) return;
   const center = !!opts.center;
   const q = String(query || "").trim().toLowerCase();
+  const prefix = st.filterLabel ? `${st.filterLabel} | ` : "";
 
   if (!q) {
     st.highlightId = selectedPaperId ? String(selectedPaperId) : null;
-    if (graphStatus) graphStatus.textContent = `${st.nodes.length} nodes · ${st.edges.length} edges`;
+    if (graphStatus) graphStatus.textContent = `${prefix}${st.nodes.length} nodes | ${st.edges.length} edges`;
     return;
   }
 
@@ -1860,8 +2080,8 @@ function graphApplySearch(query, opts = {}) {
 
   if (graphStatus) {
     graphStatus.textContent = match
-      ? `${st.nodes.length} nodes · ${st.edges.length} edges · 1 match`
-      : `${st.nodes.length} nodes · ${st.edges.length} edges · no match`;
+      ? `${prefix}${st.nodes.length} nodes | ${st.edges.length} edges | 1 match`
+      : `${prefix}${st.nodes.length} nodes | ${st.edges.length} edges | no match`;
   }
 }
 
@@ -1871,6 +2091,10 @@ async function openGraph() {
 
   const st = ensureGraphState();
   if (!st) return;
+  const filter = graphCurrentFilter();
+  st.filterLabel = filter.label;
+  if (st.lastFilterKey !== filter.key) st.userInteracted = false;
+  st.lastFilterKey = filter.key;
 
   graphOverlay.classList.remove("hidden");
   document.body.classList.add("graph-open");
@@ -1881,7 +2105,9 @@ async function openGraph() {
   if (graphStatus) graphStatus.textContent = "Loading...";
   try {
     const g = await api("/api/graph");
-    graphSetData(g);
+    const filtered = graphFilterGraph(g, filter);
+    graphSetData(filtered);
+    if (!st.userInteracted) graphZoomToFit();
     graphApplySearch(graphSearch ? graphSearch.value : "", { center: false });
   } catch (e) {
     toast(String(e.message || e), "error", 6500);
