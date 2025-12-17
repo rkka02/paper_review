@@ -118,11 +118,11 @@
 
 ## Embeddings DB 관리
 
-임베딩 백엔드를 바꾸는 경우(local ? OpenAI 등) 기존 벡터와 섞이지 않도록 `paper_embeddings`를 초기화하는 커맨드를 제공합니다.
+임베딩 모델을 바꾸는 경우(예: `OPENAI_EMBED_MODEL` 변경) 기존 벡터와 섞이지 않도록 `paper_embeddings`를 초기화하는 커맨드를 제공합니다.
 
 - 전체 초기화: `paper-review embeddings-reset --yes`
 - 재생성(현재 설정 기준): `paper-review embeddings-rebuild --yes`
-- 백엔드 강제(1회): `paper-review embeddings-rebuild --yes --provider openai` (또는 `local`)
+- 백엔드 강제(1회): `paper-review embeddings-rebuild --yes --provider openai`
 
 ## 오늘의 추천(로컬 파이프라인)
 
