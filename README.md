@@ -36,11 +36,11 @@
 ## Web UI
 
 - 브라우저에서 `http://127.0.0.1:8000` 접속
-- New paper에서 아래 중 하나(또는 조합)로 등록:
-  - 로컬 PDF 업로드
-  - Google Drive file id 입력
-  - DOI-only (PDF 없이도 등록/분석 가능: no-PDF 모드로 evidence는 빈 배열로 처리)
-- 로컬 PDF 업로드는 `UPLOAD_DIR`(기본 `./data/uploads`)에 저장되며, `data/`는 gitignore 처리되어 있습니다.
+- 현재 UI의 New paper는 **Analysis JSON 업로드/붙여넣기**를 기본 입력으로 사용합니다.
+  - (PDF/Drive/DOI 입력 UI는 현재 숨김 처리되어 있을 수 있습니다. API는 지원합니다.)
+- 업로드 후:
+  - `Graph` 버튼: 논문 연결 그래프 뷰
+  - `Recs` 버튼: 서버에 저장된 “오늘의 추천” 목록/요약
 
 ## Web UI 로그인(Cloud 배포용)
 
@@ -124,3 +124,42 @@
 - 전체 초기화: `paper-review embeddings-reset --yes`
 - 재생성(현재 설정 기준): `paper-review embeddings-rebuild --yes`
 - 백엔드 강제(1회): `paper-review embeddings-rebuild --yes --provider openai` (또는 `local`)
+
+## 오늘의 추천(로컬 파이프라인)
+
+로컬에서 아래 파이프라인을 돌린 뒤, 결과(JSON)를 서버로 업로드해서 Web UI에서 “오늘의 추천”으로 보는 구조입니다.
+
+1) 서버 라이브러리 동기화: `/api/folders`, `/api/papers/summary` 호출
+2) 후보 수집: Semantic Scholar에 쿼리 검색 + seed 논문(랜덤 선택) 기준 reference/citation 확장
+3) 랭킹: 후보 vs 내 라이브러리(폴더별) 임베딩 유사도 → top-k
+4) 최종 선택: LLM이 폴더별 3개 + cross-domain 3개를 고르고 1줄 요약/근거 생성
+5) 업로드: `/api/recommendations`로 저장 → Web UI 상단 `Recs` 버튼에서 확인
+
+### 필수 환경변수
+
+- 서버 접근: `SERVER_BASE_URL`, (`SERVER_API_KEY` 또는 `API_KEY`)
+- Semantic Scholar: `SEMANTIC_SCHOLAR_API_KEY`
+- 서버가 Web 로그인만 켜져 있으면(API_KEY 미설정): `paper-review recommend --web-username ... --web-password ...`
+  - `SERVER_BASE_URL`이 `127.0.0.1/localhost`인 경우, CLI는 `API_KEY`가 없으면 `.env`의 `WEB_USERNAME/WEB_PASSWORD`로 자동 로그인도 시도합니다.
+
+### 로컬 LLM(쿼리 생성) - Ollama 권장
+
+현재 로컬 LLM은 HuggingFace 대신 **Ollama**를 기본으로 사용합니다.
+
+- Ollama 실행: `ollama serve`
+- 모델 준비(예): `ollama pull gpt-oss-20b`
+- `.env` 설정:
+  - `RECOMMENDER_QUERY_LLM_PROVIDER=ollama` (또는 `local`)
+  - `OLLAMA_BASE_URL=http://127.0.0.1:11434`
+  - `LOCAL_LLM_MODEL=gpt-oss-20b`
+
+### 최종 선택 LLM(OpenAI → 나중에 로컬로 교체 가능)
+
+- 기본값: `RECOMMENDER_DECIDER_LLM_PROVIDER=openai` + `OPENAI_API_KEY`, `OPENAI_MODEL`
+- 나중에 Ollama로 바꾸려면: `RECOMMENDER_DECIDER_LLM_PROVIDER=ollama` (또는 `local`)
+- HuggingFace(Transformers)로 바꾸려면: `RECOMMENDER_*_LLM_PROVIDER=hf` (+ `transformers`, `accelerate`, CUDA torch 설치)
+
+### 실행
+
+- 추천 생성 + 서버 업로드: `paper-review recommend --yes`
+- JSON만 저장(업로드 안 함): `paper-review recommend --yes --dry-run --out ./tmp/recommendations.json`

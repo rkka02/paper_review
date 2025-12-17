@@ -87,6 +87,61 @@ def apply_migrations(engine: Engine) -> None:
         "alter table paper_embeddings add column if not exists created_at timestamptz;",
         "alter table paper_embeddings add column if not exists updated_at timestamptz;",
         "create index if not exists paper_embeddings_provider_idx on paper_embeddings(provider);",
+        """
+        create table if not exists recommendation_runs (
+          id uuid primary key,
+          source text not null default 'local',
+          meta jsonb,
+          created_at timestamptz not null default now()
+        );
+        """,
+        "alter table recommendation_runs add column if not exists source text;",
+        "alter table recommendation_runs add column if not exists meta jsonb;",
+        "alter table recommendation_runs add column if not exists created_at timestamptz;",
+        "create index if not exists recommendation_runs_source_idx on recommendation_runs(source);",
+        "create index if not exists recommendation_runs_created_at_idx on recommendation_runs(created_at);",
+        """
+        create table if not exists recommendation_items (
+          id uuid primary key,
+          run_id uuid not null references recommendation_runs(id) on delete cascade,
+          kind text not null,
+          folder_id uuid references folders(id) on delete set null,
+          rank int not null,
+          semantic_scholar_paper_id text,
+          title text not null,
+          doi text,
+          url text,
+          year int,
+          venue text,
+          authors jsonb,
+          abstract text,
+          score double precision,
+          summary text,
+          rationale jsonb,
+          created_at timestamptz not null default now()
+        );
+        """,
+        "alter table recommendation_items add column if not exists run_id uuid;",
+        "alter table recommendation_items add column if not exists kind text;",
+        "alter table recommendation_items add column if not exists folder_id uuid;",
+        "alter table recommendation_items add column if not exists rank int;",
+        "alter table recommendation_items add column if not exists semantic_scholar_paper_id text;",
+        "alter table recommendation_items add column if not exists title text;",
+        "alter table recommendation_items add column if not exists doi text;",
+        "alter table recommendation_items add column if not exists url text;",
+        "alter table recommendation_items add column if not exists year int;",
+        "alter table recommendation_items add column if not exists venue text;",
+        "alter table recommendation_items add column if not exists authors jsonb;",
+        "alter table recommendation_items add column if not exists abstract text;",
+        "alter table recommendation_items add column if not exists score double precision;",
+        "alter table recommendation_items add column if not exists summary text;",
+        "alter table recommendation_items add column if not exists rationale jsonb;",
+        "alter table recommendation_items add column if not exists created_at timestamptz;",
+        "create index if not exists recommendation_items_run_id_idx on recommendation_items(run_id);",
+        "create index if not exists recommendation_items_folder_id_idx on recommendation_items(folder_id);",
+        "create index if not exists recommendation_items_kind_idx on recommendation_items(kind);",
+        "create unique index if not exists recommendation_items_run_group_rank_uniq "
+        "on recommendation_items(run_id, kind, folder_id, rank);",
     ]
 
     with engine.begin() as conn:

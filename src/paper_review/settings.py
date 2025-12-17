@@ -46,6 +46,23 @@ class Settings(BaseSettings):
     openai_embed_model: str = Field(default="text-embedding-3-large", alias="OPENAI_EMBED_MODEL")
     openai_embed_batch_size: int = Field(default=96, alias="OPENAI_EMBED_BATCH_SIZE")
 
+    server_base_url: str = Field(default="http://127.0.0.1:8000", alias="SERVER_BASE_URL")
+    server_api_key: str | None = Field(default=None, alias="SERVER_API_KEY")
+
+    recommender_query_llm_provider: str = Field(default="local", alias="RECOMMENDER_QUERY_LLM_PROVIDER")
+    recommender_decider_llm_provider: str = Field(default="openai", alias="RECOMMENDER_DECIDER_LLM_PROVIDER")
+
+    local_llm_model: str = Field(default="gpt-oss-20b", alias="LOCAL_LLM_MODEL")
+    local_llm_device_map: str = Field(default="auto", alias="LOCAL_LLM_DEVICE_MAP")
+    local_llm_torch_dtype: str = Field(default="auto", alias="LOCAL_LLM_TORCH_DTYPE")
+    local_llm_max_new_tokens: int = Field(default=256, alias="LOCAL_LLM_MAX_NEW_TOKENS")
+    local_llm_temperature: float = Field(default=0.2, alias="LOCAL_LLM_TEMPERATURE")
+    local_llm_top_p: float = Field(default=0.95, alias="LOCAL_LLM_TOP_P")
+    local_llm_trust_remote_code: bool = Field(default=False, alias="LOCAL_LLM_TRUST_REMOTE_CODE")
+
+    ollama_base_url: str = Field(default="http://127.0.0.1:11434", alias="OLLAMA_BASE_URL")
+    ollama_timeout_seconds: int = Field(default=120, alias="OLLAMA_TIMEOUT_SECONDS")
+
     google_client_id: str | None = Field(default=None, alias="GOOGLE_CLIENT_ID")
     google_client_secret: str | None = Field(default=None, alias="GOOGLE_CLIENT_SECRET")
     google_refresh_token: str | None = Field(default=None, alias="GOOGLE_REFRESH_TOKEN")

@@ -55,6 +55,14 @@ const graphCloseBtn = $("graphCloseBtn");
 const graphSearch = $("graphSearch");
 const graphStatus = $("graphStatus");
 
+const recsBtn = $("recsBtn");
+const recsBadge = $("recsBadge");
+const recsOverlay = $("recsOverlay");
+const recsCloseBtn = $("recsCloseBtn");
+const recsRefreshBtn = $("recsRefreshBtn");
+const recsMeta = $("recsMeta");
+const recsContent = $("recsContent");
+
 let selectedPaperId = null;
 let pollHandle = null;
 let authEnabled = false;
@@ -78,6 +86,7 @@ let overviewCtx = null;
 let paperMenuEl = null;
 let paperMenuToken = null;
 let graphState = null;
+let latestRecs = null;
 
 function show(el) {
   el.classList.remove("hidden");
@@ -1447,6 +1456,154 @@ function closeGraph() {
   window.removeEventListener("keydown", onGraphKeydown, true);
 }
 
+function isRecsOpen() {
+  return recsOverlay && !recsOverlay.classList.contains("hidden");
+}
+
+function closeRecs() {
+  if (!recsOverlay) return;
+  recsOverlay.classList.add("hidden");
+  document.body.classList.remove("graph-open");
+  window.removeEventListener("keydown", onRecsKeydown, true);
+}
+
+function onRecsKeydown(e) {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    closeRecs();
+  }
+}
+
+function setRecsBadge(count) {
+  if (!recsBtn) return;
+  const n = Math.max(0, Number(count || 0));
+  if (n <= 0) {
+    if (recsBadge) recsBadge.classList.add("hidden");
+    recsBtn.classList.add("hidden");
+    return;
+  }
+  recsBtn.classList.remove("hidden");
+  if (recsBadge) {
+    recsBadge.classList.remove("hidden");
+    recsBadge.textContent = String(n);
+  }
+}
+
+function renderRecs(run) {
+  if (!recsContent) return;
+  recsContent.innerHTML = "";
+  if (!run || !Array.isArray(run.items) || run.items.length === 0) {
+    if (recsMeta) recsMeta.textContent = "No recommendations.";
+    return;
+  }
+
+  const createdAt = run.created_at ? String(run.created_at) : "";
+  if (recsMeta) recsMeta.textContent = `Updated: ${createdAt}`;
+
+  const groups = new Map();
+  for (const item of run.items) {
+    const kind = item?.kind || "folder";
+    const fid = item?.folder_id || "";
+    const key = `${kind}:${fid}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
+
+  const groupEntries = Array.from(groups.entries());
+  groupEntries.sort((a, b) => {
+    const [ka] = a;
+    const [kb] = b;
+    const aIsCross = ka.startsWith("cross_domain");
+    const bIsCross = kb.startsWith("cross_domain");
+    if (aIsCross !== bIsCross) return aIsCross ? 1 : -1;
+    return ka.localeCompare(kb);
+  });
+
+  function clipText(t, n) {
+    const s = String(t || "").trim();
+    if (!s) return "";
+    if (s.length <= n) return s;
+    return `${s.slice(0, n).trim()}…`;
+  }
+
+  for (const [key, items] of groupEntries) {
+    items.sort((x, y) => Number(x?.rank || 0) - Number(y?.rank || 0));
+    const [kind, fid] = key.split(":", 2);
+    const title =
+      kind === "cross_domain"
+        ? "Cross-domain"
+        : folderName(fid) || (fid ? `Folder ${fid.slice(0, 8)}` : "Folder");
+
+    const groupEl = createEl("div", { className: "recs-group" });
+    groupEl.appendChild(createEl("div", { className: "recs-group-title", text: title }));
+
+    for (const it of items) {
+      const itemEl = createEl("div", { className: "recs-item" });
+      const titleEl = createEl("div", { className: "recs-title" });
+      const link = String(it?.url || "").trim();
+      if (link) {
+        titleEl.appendChild(
+          createEl("a", {
+            text: String(it?.title || "(untitled)"),
+            attrs: { href: link, target: "_blank", rel: "noreferrer" },
+          }),
+        );
+      } else {
+        titleEl.textContent = String(it?.title || "(untitled)");
+      }
+
+      const metaParts = [];
+      if (it?.year) metaParts.push(String(it.year));
+      if (it?.venue) metaParts.push(String(it.venue));
+      if (it?.doi) metaParts.push(`doi: ${it.doi}`);
+      if (typeof it?.score === "number") metaParts.push(`score: ${it.score.toFixed(3)}`);
+
+      const metaEl = createEl("div", { className: "recs-meta muted", text: metaParts.join(" | ") });
+
+      const summaryText = String(it?.summary || "").trim() || clipText(it?.abstract, 220);
+      const summaryEl = createEl("div", { className: "recs-summary", text: summaryText });
+
+      itemEl.appendChild(titleEl);
+      if (metaParts.length) itemEl.appendChild(metaEl);
+      if (summaryText) itemEl.appendChild(summaryEl);
+      groupEl.appendChild(itemEl);
+    }
+
+    recsContent.appendChild(groupEl);
+  }
+}
+
+async function refreshRecommendations({ silent = false } = {}) {
+  try {
+    latestRecs = await api("/api/recommendations/latest");
+    setRecsBadge(latestRecs?.items?.length || 0);
+    if (isRecsOpen()) renderRecs(latestRecs);
+  } catch (e) {
+    if (e && e.status === 404) {
+      latestRecs = null;
+      setRecsBadge(0);
+      if (recsMeta) recsMeta.textContent = "No recommendations.";
+      if (isRecsOpen()) renderRecs(null);
+      return;
+    }
+    if (!silent) toast(String(e.message || e), "error", 6500);
+  }
+}
+
+async function openRecs() {
+  if (!recsOverlay) return;
+  closePaperMenu();
+  closeGraph();
+
+  recsOverlay.classList.remove("hidden");
+  document.body.classList.add("graph-open");
+  window.addEventListener("keydown", onRecsKeydown, true);
+
+  if (recsMeta) recsMeta.textContent = "Loading...";
+  await refreshRecommendations({ silent: true });
+  renderRecs(latestRecs);
+}
+
 function graphCssColors() {
   const s = getComputedStyle(document.documentElement);
   return {
@@ -2096,6 +2253,7 @@ function graphApplySearch(query, opts = {}) {
 async function openGraph() {
   if (!graphOverlay) return;
   closePaperMenu();
+  closeRecs();
 
   const st = ensureGraphState();
   if (!st) return;
@@ -2136,6 +2294,7 @@ async function refreshSession() {
     show(appSection);
     hide(logoutBtn);
     if (graphBtn) show(graphBtn);
+    if (recsBtn && latestRecs) show(recsBtn);
     return;
   }
 
@@ -2144,6 +2303,8 @@ async function refreshSession() {
     hide(appSection);
     hide(logoutBtn);
     if (graphBtn) hide(graphBtn);
+    if (recsBtn) hide(recsBtn);
+    closeRecs();
     return;
   }
 
@@ -2151,6 +2312,7 @@ async function refreshSession() {
   show(appSection);
   show(logoutBtn);
   if (graphBtn) show(graphBtn);
+  if (recsBtn && latestRecs) show(recsBtn);
 }
 
 async function login() {
@@ -2178,6 +2340,7 @@ async function login() {
 
 async function logout() {
   closeGraph();
+  closeRecs();
   stopPolling();
   await api("/api/session", { method: "DELETE" });
   selectedPaperId = null;
@@ -2484,6 +2647,9 @@ async function main() {
     if (e.key === "Enter") login();
   });
   logoutBtn.addEventListener("click", logout);
+  if (recsBtn) recsBtn.addEventListener("click", openRecs);
+  if (recsCloseBtn) recsCloseBtn.addEventListener("click", closeRecs);
+  if (recsRefreshBtn) recsRefreshBtn.addEventListener("click", () => refreshRecommendations());
   if (graphBtn) graphBtn.addEventListener("click", openGraph);
   if (graphCloseBtn) graphCloseBtn.addEventListener("click", closeGraph);
   if (graphSearch) {
@@ -2511,6 +2677,7 @@ async function main() {
     await refreshFolders();
     await refreshPapers();
     if (selectedPaperId) await loadDetails(selectedPaperId);
+    await refreshRecommendations({ silent: true });
   });
   if (paperSearch) paperSearch.addEventListener("input", applyPapersFilter);
   if (paperPrevBtn) {
@@ -2532,6 +2699,7 @@ async function main() {
   if (authEnabled && !loginSection.classList.contains("hidden")) return;
   await refreshFolders();
   await refreshPapers();
+  await refreshRecommendations({ silent: true });
 }
 
 main().catch((e) => {

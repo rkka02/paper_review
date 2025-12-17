@@ -14,6 +14,9 @@
       </div>
       <div class="spacer"></div>
       <button id="themeToggle" class="btn btn-ghost" type="button">Dark</button>
+      <button id="recsBtn" class="btn btn-secondary hidden" type="button">
+        Recs <span id="recsBadge" class="badge badge-warn hidden"></span>
+      </button>
       <button id="graphBtn" class="btn btn-secondary hidden" type="button">Graph</button>
       <button id="logoutBtn" class="btn btn-secondary hidden" type="button">Logout</button>
     </header>
@@ -194,6 +197,19 @@
         <canvas id="graphCanvas"></canvas>
         <div class="graph-hint muted">Drag: pan | Wheel: zoom | Drag node | Click: open paper</div>
         <div id="graphStatus" class="graph-status muted"></div>
+      </div>
+    </section>
+
+    <section id="recsOverlay" class="graph-overlay hidden" aria-hidden="true">
+      <div class="graph-toolbar">
+        <div class="graph-title">Today’s recommendations</div>
+        <div class="spacer"></div>
+        <button id="recsRefreshBtn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+        <button id="recsCloseBtn" class="btn btn-secondary btn-small" type="button">Close</button>
+      </div>
+      <div class="graph-canvas-wrap recs-wrap">
+        <div id="recsMeta" class="muted small"></div>
+        <div id="recsContent" class="recs-content"></div>
       </div>
     </section>
 

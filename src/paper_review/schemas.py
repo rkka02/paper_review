@@ -119,3 +119,59 @@ class ReviewUpsert(BaseModel):
     pros: str | None = None
     cons: str | None = None
     rating_overall: int | None = Field(default=None, ge=0, le=5)
+
+
+class RecommendationItemIn(BaseModel):
+    kind: str
+    folder_id: uuid.UUID | None = None
+    rank: int = Field(ge=1)
+
+    semantic_scholar_paper_id: str | None = None
+    title: str
+    doi: str | None = None
+    url: str | None = None
+    year: int | None = None
+    venue: str | None = None
+    authors: list[dict] | None = None
+    abstract: str | None = None
+
+    score: float | None = None
+    summary: str | None = None
+    rationale: dict | None = None
+
+
+class RecommendationRunCreate(BaseModel):
+    source: str = "local"
+    meta: dict | None = None
+    items: list[RecommendationItemIn] = Field(default_factory=list)
+
+
+class RecommendationItemOut(BaseModel):
+    id: uuid.UUID
+    run_id: uuid.UUID
+    kind: str
+    folder_id: uuid.UUID | None
+    rank: int
+
+    semantic_scholar_paper_id: str | None
+    title: str
+    doi: str | None
+    url: str | None
+    year: int | None
+    venue: str | None
+    authors: list[dict] | None
+    abstract: str | None
+
+    score: float | None
+    summary: str | None
+    rationale: dict | None
+
+    created_at: datetime
+
+
+class RecommendationRunOut(BaseModel):
+    id: uuid.UUID
+    source: str
+    meta: dict | None
+    created_at: datetime
+    items: list[RecommendationItemOut] = Field(default_factory=list)

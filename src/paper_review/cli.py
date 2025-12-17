@@ -5,6 +5,7 @@ import logging
 import re
 import uuid
 from urllib.parse import urlparse
+from pathlib import Path
 
 import socket
 
@@ -71,6 +72,8 @@ def show_config() -> None:
     """Print the current effective configuration (secrets masked)."""
     safe = {
         "DATABASE_URL": _redact_secrets(settings.database_url),
+        "SERVER_BASE_URL": settings.server_base_url,
+        "SERVER_API_KEY": "***" if settings.server_api_key else None,
         "OPENAI_MODEL": settings.openai_model,
         "OPENAI_API_KEY": "***" if settings.openai_api_key else None,
         "EMBEDDINGS_PROVIDER": settings.embeddings_provider,
@@ -80,6 +83,11 @@ def show_config() -> None:
         "LOCAL_EMBED_BATCH_SIZE": settings.local_embed_batch_size,
         "OPENAI_EMBED_MODEL": settings.openai_embed_model,
         "OPENAI_EMBED_BATCH_SIZE": settings.openai_embed_batch_size,
+        "RECOMMENDER_QUERY_LLM_PROVIDER": settings.recommender_query_llm_provider,
+        "RECOMMENDER_DECIDER_LLM_PROVIDER": settings.recommender_decider_llm_provider,
+        "LOCAL_LLM_MODEL": settings.local_llm_model,
+        "OLLAMA_BASE_URL": settings.ollama_base_url,
+        "OLLAMA_TIMEOUT_SECONDS": settings.ollama_timeout_seconds,
         "GOOGLE_CLIENT_ID": "***" if settings.google_client_id else None,
         "GOOGLE_REFRESH_TOKEN": "***" if settings.google_refresh_token else None,
         "GOOGLE_SERVICE_ACCOUNT_FILE": settings.google_service_account_file,
@@ -177,3 +185,198 @@ def embeddings_rebuild(
     with db_session() as db:
         result = rebuild_paper_embeddings(db, embedder, limit=limit, reset_if_changed=True)
     print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@app.command()
+def recommend(
+    server_url: str | None = typer.Option(None, help="Server base URL (default: SERVER_BASE_URL)."),
+    api_key: str | None = typer.Option(None, help="Server API key (default: SERVER_API_KEY or API_KEY)."),
+    web_username: str | None = typer.Option(None, help="Web login username (session-based auth)."),
+    web_password: str | None = typer.Option(None, help="Web login password (session-based auth)."),
+    per_folder: int = typer.Option(3, help="Recommendations per folder."),
+    cross_domain: int = typer.Option(3, help="Cross-domain recommendations."),
+    seeds_per_folder: int = typer.Option(5, help="Random seeds per folder."),
+    seed_selector: str = typer.Option("random", help="Seed selection strategy (currently: random)."),
+    random_seed: int | None = typer.Option(None, help="Fixed RNG seed (reproducible run)."),
+    queries_per_folder: int = typer.Option(3, help="Semantic Scholar queries per folder."),
+    search_limit: int = typer.Option(50, help="Semantic Scholar results per query."),
+    out: Path | None = typer.Option(None, help="Write the generated payload JSON to this file."),
+    dry_run: bool = typer.Option(False, help="Do not upload to the server."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Do not prompt; proceed immediately."),
+) -> None:
+    """Generate paper recommendations locally (Semantic Scholar + embeddings + LLM) and upload to server."""
+    base_url = (server_url or settings.server_base_url or "").strip()
+    if not base_url:
+        raise typer.BadParameter("SERVER_BASE_URL is required.")
+
+    key = (api_key or settings.server_api_key or settings.api_key or "").strip() or None
+
+    web_user = (web_username or "").strip() or None
+    web_pass = (web_password or "").strip() or None
+    if (web_user and not web_pass) or (web_pass and not web_user):
+        raise typer.BadParameter("Provide both --web-username and --web-password (or neither).")
+
+    if not key and not web_user and not web_pass:
+        host = (urlparse(base_url).hostname or "").lower()
+        if host in {"127.0.0.1", "localhost", "0.0.0.0"} and settings.web_username and settings.web_password:
+            web_user = settings.web_username
+            web_pass = settings.web_password
+
+    if not yes:
+        ok = typer.confirm(
+            "This will call Semantic Scholar (network) and may call OpenAI (decider). Continue?",
+            default=False,
+        )
+        if not ok:
+            raise typer.Exit(code=1)
+
+    from paper_review.recommender import RecommenderConfig, build_recommendations
+    from paper_review.recommender.server_client import ServerClient
+
+    try:
+        with ServerClient(
+            base_url=base_url,
+            api_key=key,
+            web_username=web_user,
+            web_password=web_pass,
+            timeout_seconds=60.0,
+        ) as client:
+            folders = client.fetch_folders()
+            paper_summaries = client.fetch_papers_summary()
+
+            seed_selector_key = (seed_selector or "").strip().lower()
+            if seed_selector_key != "random":
+                raise typer.BadParameter("Unsupported seed_selector (use: random).")
+
+            from paper_review.recommender.seed import RandomSeedSelector
+
+            payload = build_recommendations(
+                folders=folders,
+                paper_summaries=paper_summaries,
+                config=RecommenderConfig(
+                    per_folder=per_folder,
+                    cross_domain=cross_domain,
+                    seeds_per_folder=seeds_per_folder,
+                    random_seed=random_seed,
+                    queries_per_folder=queries_per_folder,
+                    search_limit=search_limit,
+                ),
+                seed_selector=RandomSeedSelector(),
+            )
+
+            payload_json = payload.model_dump(mode="json")
+            if out is not None:
+                out.parent.mkdir(parents=True, exist_ok=True)
+                out.write_text(json.dumps(payload_json, ensure_ascii=False, indent=2), encoding="utf-8")
+                print(f"[green]OK[/green] wrote {out}.")
+
+            if dry_run:
+                print(json.dumps(payload_json, ensure_ascii=False, indent=2))
+                return
+
+            result = client.upload_recommendations(payload)
+            print(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "run_id": str(result.id),
+                        "created_at": str(result.created_at),
+                        "items": len(result.items),
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+    except Exception as e:  # noqa: BLE001
+        try:
+            import httpx
+        except Exception:  # noqa: BLE001
+            httpx = None  # type: ignore[assignment]
+
+        if httpx is not None and isinstance(e, httpx.HTTPStatusError):
+            code = int(e.response.status_code)
+            if code == 404:
+                print("[red]Server URL looks incorrect (404 Not Found).[/red]")
+                print(f"- Requested: {e.request.method} {e.request.url}")
+                print(
+                    "- `SERVER_BASE_URL` must point to the running paper-review API server "
+                    "(where `/health` returns `{ok:true}`), not your Supabase project URL."
+                )
+                print("- Example (local): `SERVER_BASE_URL=http://127.0.0.1:8000`")
+                raise typer.Exit(code=1)
+
+            if code == 401:
+                print("[red]Unauthorized (401).[/red]")
+                print(f"- Requested: {e.request.method} {e.request.url}")
+                print("- Server auth is enabled. Use one of:")
+                print("  - API key: set `API_KEY` on the server and pass `SERVER_API_KEY` (or `--api-key`).")
+                print(
+                    "  - Web login: run `paper-review recommend --web-username ... --web-password ...` "
+                    "(for localhost, the CLI auto-uses `.env` WEB_USERNAME/WEB_PASSWORD if API_KEY is unset)."
+                )
+                raise typer.Exit(code=1)
+
+        if httpx is not None and isinstance(e, (httpx.ConnectError, httpx.ConnectTimeout)):
+            req_url = ""
+            try:
+                req_url = str(getattr(getattr(e, "request", None), "url", "") or "")
+            except Exception:  # noqa: BLE001
+                req_url = ""
+
+            req_netloc = (urlparse(req_url).netloc or "").lower() if req_url else ""
+            server_netloc = (urlparse(base_url).netloc or "").lower()
+            ollama_netloc = (urlparse(settings.ollama_base_url).netloc or "").lower()
+
+            if req_netloc and ollama_netloc and req_netloc == ollama_netloc:
+                print("[red]Could not connect to Ollama.[/red]")
+                print(f"- OLLAMA_BASE_URL: {settings.ollama_base_url}")
+                print("- Start Ollama: `ollama serve` (or launch the Ollama app).")
+                print("- Quick check: `curl http://127.0.0.1:11434/api/tags`")
+                raise typer.Exit(code=1)
+
+            if req_netloc and server_netloc and req_netloc == server_netloc:
+                print("[red]Could not connect to the API server.[/red]")
+                print(f"- SERVER_BASE_URL: {base_url}")
+                print("- Check that the API server is running and reachable from this machine.")
+                print("- Quick check: `curl http://127.0.0.1:8000/health` (or open it in a browser).")
+                raise typer.Exit(code=1)
+
+            print("[red]Could not connect to a required service.[/red]")
+            if req_url:
+                print(f"- URL: {req_url}")
+            print(f"- SERVER_BASE_URL: {base_url}")
+            print(f"- OLLAMA_BASE_URL: {settings.ollama_base_url}")
+            raise typer.Exit(code=1)
+
+        if httpx is not None and isinstance(e, httpx.ReadTimeout):
+            req_url = ""
+            try:
+                req_url = str(getattr(getattr(e, "request", None), "url", "") or "")
+            except Exception:  # noqa: BLE001
+                req_url = ""
+
+            req_netloc = (urlparse(req_url).netloc or "").lower() if req_url else ""
+            server_netloc = (urlparse(base_url).netloc or "").lower()
+            ollama_netloc = (urlparse(settings.ollama_base_url).netloc or "").lower()
+
+            if req_netloc and ollama_netloc and req_netloc == ollama_netloc:
+                print("[red]Ollama request timed out.[/red]")
+                print(f"- OLLAMA_BASE_URL: {settings.ollama_base_url}")
+                print("- The model may still be loading; try again after it is warmed up.")
+                raise typer.Exit(code=1)
+
+            if req_netloc and server_netloc and req_netloc == server_netloc:
+                print("[red]Server request timed out.[/red]")
+                print(f"- SERVER_BASE_URL: {base_url}")
+                print("- The server may be down or blocked, or the URL/port is incorrect.")
+                raise typer.Exit(code=1)
+
+            print("[red]Request timed out.[/red]")
+            if req_url:
+                print(f"- URL: {req_url}")
+            raise typer.Exit(code=1)
+
+        if isinstance(e, RuntimeError) and "COOKIE_HTTPS_ONLY" in str(e):
+            print(f"[red]{e}[/red]")
+            raise typer.Exit(code=1)
+        raise

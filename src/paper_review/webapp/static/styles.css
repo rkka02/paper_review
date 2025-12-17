@@ -1433,3 +1433,58 @@ html[data-theme="dark"] .graph-status {
 .graph-status {
   top: 14px;
 }
+
+.recs-wrap {
+  overflow: auto;
+  padding: 14px;
+}
+
+.recs-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 10px;
+}
+
+.recs-group {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 10px 20px var(--shadow-1);
+  padding: 12px 12px;
+}
+
+html[data-theme="dark"] .recs-group {
+  background: rgba(11, 16, 32, 0.46);
+}
+
+.recs-group-title {
+  font-weight: 900;
+  margin-bottom: 10px;
+}
+
+.recs-item {
+  border-top: 1px solid var(--border);
+  padding: 10px 2px;
+}
+
+.recs-item:first-of-type {
+  border-top: 0;
+  padding-top: 2px;
+}
+
+.recs-title {
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.recs-meta {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.recs-summary {
+  margin-top: 8px;
+  white-space: pre-wrap;
+}

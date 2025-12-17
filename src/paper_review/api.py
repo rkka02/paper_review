@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import delete, desc, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import HTMLResponse
 from starlette.staticfiles import StaticFiles
@@ -25,6 +25,8 @@ from paper_review.models import (
     Paper,
     PaperLink,
     PaperMetadata,
+    RecommendationItem,
+    RecommendationRun,
     Review,
 )
 from paper_review.render import render_markdown
@@ -44,6 +46,9 @@ from paper_review.schemas import (
     PaperSummaryOut,
     PaperUpdate,
     ReviewUpsert,
+    RecommendationRunCreate,
+    RecommendationRunOut,
+    RecommendationItemOut,
 )
 from paper_review.settings import settings
 
@@ -908,3 +913,95 @@ def upsert_review(paper_id: uuid.UUID, payload: ReviewUpsert, db: Session = Depe
     db.flush()
     db.refresh(review)
     return {"ok": True, "review_id": str(review.id)}
+
+
+@app.get(
+    "/api/recommendations/latest",
+    response_model=RecommendationRunOut,
+    dependencies=[Depends(_require_auth)],
+)
+def get_latest_recommendations(db: Session = Depends(get_db)) -> RecommendationRunOut:
+    run = (
+        db.execute(
+            select(RecommendationRun)
+            .options(selectinload(RecommendationRun.items))
+            .order_by(desc(RecommendationRun.created_at))
+            .limit(1)
+        )
+        .scalars()
+        .first()
+    )
+    if not run:
+        raise HTTPException(status_code=404, detail="No recommendations.")
+
+    items = sorted(
+        run.items,
+        key=lambda i: (
+            i.kind or "",
+            str(i.folder_id or ""),
+            int(i.rank or 0),
+        ),
+    )
+    return RecommendationRunOut(
+        id=run.id,
+        source=run.source,
+        meta=run.meta,
+        created_at=run.created_at,
+        items=[RecommendationItemOut.model_validate(it, from_attributes=True) for it in items],
+    )
+
+
+@app.post(
+    "/api/recommendations",
+    response_model=RecommendationRunOut,
+    dependencies=[Depends(_require_auth)],
+)
+def create_recommendations(payload: RecommendationRunCreate, db: Session = Depends(get_db)) -> RecommendationRunOut:
+    run = RecommendationRun(source=(payload.source or "local").strip() or "local", meta=payload.meta)
+    db.add(run)
+    db.flush()
+
+    for item in payload.items:
+        db.add(
+            RecommendationItem(
+                run_id=run.id,
+                kind=(item.kind or "").strip() or "folder",
+                folder_id=item.folder_id,
+                rank=int(item.rank),
+                semantic_scholar_paper_id=(item.semantic_scholar_paper_id or "").strip() or None,
+                title=(item.title or "").strip() or "(untitled)",
+                doi=(item.doi or "").strip() or None,
+                url=(item.url or "").strip() or None,
+                year=item.year,
+                venue=(item.venue or "").strip() or None,
+                authors=item.authors,
+                abstract=(item.abstract or "").strip() or None,
+                score=float(item.score) if item.score is not None else None,
+                summary=(item.summary or "").strip() or None,
+                rationale=item.rationale,
+            )
+        )
+
+    db.flush()
+    db.refresh(run)
+
+    items = (
+        db.execute(
+            select(RecommendationItem)
+            .where(RecommendationItem.run_id == run.id)
+            .order_by(
+                RecommendationItem.kind.asc(),
+                RecommendationItem.folder_id.asc(),
+                RecommendationItem.rank.asc(),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return RecommendationRunOut(
+        id=run.id,
+        source=run.source,
+        meta=run.meta,
+        created_at=run.created_at,
+        items=[RecommendationItemOut.model_validate(it, from_attributes=True) for it in items],
+    )
