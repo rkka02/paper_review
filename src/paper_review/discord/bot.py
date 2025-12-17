@@ -115,6 +115,15 @@ def _split_discord_chunks(text: str, *, chunk_size: int = 1500) -> list[str]:
     return out
 
 
+def _format_debug_blocks(label: str, raw_text: str) -> list[str]:
+    chunks = _split_discord_chunks(raw_text or "", chunk_size=1500)
+    total = len(chunks)
+    msgs: list[str] = []
+    for idx, chunk in enumerate(chunks, start=1):
+        msgs.append(f"{label} ({idx}/{total}):\n```text\n{chunk}\n```")
+    return msgs
+
+
 async def run_discord_bot() -> None:
     token = (settings.discord_bot_token or "").strip()
     if not token:
@@ -209,11 +218,10 @@ async def run_discord_bot() -> None:
                     f"(provider={e.provider} model={e.model})\n"
                     "아래는 디버깅용 원본 출력입니다:",
                 ]
-                raw = e.raw_output or ""
-                chunks = _split_discord_chunks(raw, chunk_size=1500)
-                total = len(chunks)
-                for idx, chunk in enumerate(chunks, start=1):
-                    messages.append(f"Gemini raw output ({idx}/{total}):\n```text\n{chunk}\n```")
+                messages.extend(_format_debug_blocks("Gemini raw output", e.raw_output or ""))
+                if e.raw_response:
+                    messages.append("Gemini raw response payload:")
+                    messages.extend(_format_debug_blocks("Gemini raw response", e.raw_response))
             except Exception as e:  # noqa: BLE001
                 messages = [f"<@{author_id}> Error: {type(e).__name__}: {e}"]
 

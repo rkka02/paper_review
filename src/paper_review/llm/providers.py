@@ -105,11 +105,20 @@ def _coerce_json_object(raw: str) -> dict[str, Any]:
 
 
 class LLMOutputParseError(ValueError):
-    def __init__(self, message: str, *, provider: str, model: str, raw_output: str):
+    def __init__(
+        self,
+        message: str,
+        *,
+        provider: str,
+        model: str,
+        raw_output: str,
+        raw_response: str | None = None,
+    ):
         super().__init__(message)
         self.provider = provider
         self.model = model
         self.raw_output = raw_output
+        self.raw_response = raw_response
 
 
 @dataclass(slots=True)
@@ -369,9 +378,15 @@ class GoogleJsonLLM:
         try:
             return _coerce_json_object(raw)
         except Exception as e:  # noqa: BLE001
+            raw_response = None
+            try:
+                raw_response = json.dumps(payload, ensure_ascii=False, indent=2)
+            except Exception:  # noqa: BLE001
+                raw_response = str(payload)
             raise LLMOutputParseError(
                 f"Failed to parse JSON output ({type(e).__name__}: {e}).",
                 provider=self.provider,
                 model=self.model,
                 raw_output=raw,
+                raw_response=raw_response,
             ) from e
