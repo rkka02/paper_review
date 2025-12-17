@@ -83,6 +83,34 @@
 
 - API URL에서 `/health` 확인 후, 루트(`/`)로 접속해 Web UI 로그인/등록/분석
 
+## Discord (Role 멘션 → 페르소나 답장)
+
+Discord에서 `@히카리/@레이/@츠구미` 같은 **Role 멘션**으로 서버에 질문하면, 봇이 메시지를 수신하고 **웹훅으로 페르소나 이름/아이콘**으로 답장하는 구조입니다.
+
+### 준비
+- Discord Bot 생성 + `MESSAGE CONTENT INTENT` 활성화
+- 서버(길드)에 Bot 초대(권한: Read/Send + Role 멘션 읽기)
+- 채널에 Webhook 생성 후 URL 확보
+- Role 3개 생성(예: 히카리/레이/츠구미) + 각 Role ID 확보
+
+### 환경변수(.env)
+- 필수: `DISCORD_BOT_TOKEN`, `DISCORD_WEBHOOK_URL`
+- 페르소나 Role ID:
+  - `DISCORD_PERSONA_HIKARI_ROLE_ID`, `DISCORD_PERSONA_REI_ROLE_ID`, `DISCORD_PERSONA_TSUGUMI_ROLE_ID`
+  - (선택) `DISCORD_PERSONA_*_AVATAR_URL`
+- 접근 제한(선택): `DISCORD_ALLOWED_USER_IDS`, `DISCORD_ALLOWED_GUILD_IDS` (comma-separated)
+
+### 실행
+- Bot만 실행: `paper-review discord-bot`
+- PaaS에서 포트가 필요하면: `paper-review discord-bot-serve --host 0.0.0.0 --port $PORT`
+
+## Discord 알림(추천 완료)
+
+서버에서 추천 작업이 끝나면 Discord 웹훅으로 알립니다.
+
+- `DISCORD_NOTIFY_RECOMMENDER=true`
+- (선택) `DISCORD_NOTIFY_WEBHOOK_URL` (없으면 `DISCORD_WEBHOOK_URL` 사용)
+
 ## API 사용 예시
 
 - 논문 등록(Drive 파일 ID 기반):

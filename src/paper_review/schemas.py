@@ -52,6 +52,8 @@ class PaperOut(BaseModel):
     status: str
     folder_id: uuid.UUID | None
     memo: str | None
+    metadata_row: "PaperMetadataOut | None" = None
+    review: "ReviewOut | None" = None
     created_at: datetime
     updated_at: datetime
 
@@ -117,6 +119,29 @@ class GraphNodeOut(BaseModel):
     title: str | None
     doi: str | None
     folder_id: uuid.UUID | None
+
+
+class PaperMetadataOut(BaseModel):
+    paper_id: uuid.UUID
+    authors: list[dict] | None
+    year: int | None
+    venue: str | None
+    url: str | None
+    source: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ReviewOut(BaseModel):
+    id: uuid.UUID
+    paper_id: uuid.UUID
+    one_liner: str | None
+    summary: str | None
+    pros: str | None
+    cons: str | None
+    rating_overall: int | None
+    created_at: datetime
+    updated_at: datetime
 
 
 class GraphOut(BaseModel):

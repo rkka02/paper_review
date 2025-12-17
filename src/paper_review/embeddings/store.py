@@ -41,6 +41,23 @@ def paper_embedding_text(paper: Paper) -> str:
     if abstract:
         parts.append(f"Abstract: {abstract}")
 
+    memo = (paper.memo or "").strip()
+    if memo:
+        parts.append(f"Memo: {memo}")
+
+    review = paper.review
+    if review:
+        if (review.one_liner or "").strip():
+            parts.append(f"Review one-liner: {review.one_liner.strip()}")
+        if (review.summary or "").strip():
+            parts.append(f"Review summary: {review.summary.strip()}")
+        if (review.pros or "").strip():
+            parts.append(f"Review pros: {review.pros.strip()}")
+        if (review.cons or "").strip():
+            parts.append(f"Review cons: {review.cons.strip()}")
+        if review.rating_overall is not None:
+            parts.append(f"Review rating_overall: {review.rating_overall}")
+
     if not parts:
         return f"Paper {paper.id}"
     return "\n".join(parts)
@@ -87,7 +104,11 @@ def rebuild_paper_embeddings(
 
     reset_done = ensure_embedding_backend(db, provider, model, reset_if_changed=reset_if_changed)
 
-    stmt = select(Paper).options(selectinload(Paper.metadata_row)).order_by(Paper.created_at.desc())
+    stmt = (
+        select(Paper)
+        .options(selectinload(Paper.metadata_row), selectinload(Paper.review))
+        .order_by(Paper.created_at.desc())
+    )
     papers = db.execute(stmt).scalars().all()
     if limit is not None:
         papers = papers[: max(0, int(limit))]

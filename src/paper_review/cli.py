@@ -133,6 +133,36 @@ def worker_serve(
 
 
 @app.command()
+def discord_bot(log_level: str = typer.Option("INFO", help="Logging level (DEBUG/INFO/WARNING/ERROR).")) -> None:
+    """Run the Discord bot (role mention -> persona reply via webhook)."""
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper(), logging.INFO),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    import asyncio
+
+    from paper_review.discord.bot import run_discord_bot
+
+    asyncio.run(run_discord_bot())
+
+
+@app.command()
+def discord_bot_serve(
+    host: str = "0.0.0.0",
+    port: int = 8002,
+    log_level: str = typer.Option("INFO", help="Logging level (DEBUG/INFO/WARNING/ERROR)."),
+) -> None:
+    """Run the Discord bot with an HTTP /health endpoint (useful on PaaS that requires a port)."""
+    import uvicorn
+
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper(), logging.INFO),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    uvicorn.run("paper_review.discord_service:app", host=host, port=port, reload=False)
+
+
+@app.command()
 def analyze(paper_id: str) -> None:
     """Enqueue analysis for a paper id."""
     from paper_review.services import enqueue_analysis_run
@@ -238,11 +268,59 @@ def recommend(
         title = (paper.get("title") or "").strip()
         doi = (paper.get("doi") or "").strip()
         abstract = (paper.get("abstract") or "").strip()
+        status = (paper.get("status") or "").strip()
+        memo = (paper.get("memo") or "").strip()
+
+        meta = paper.get("metadata_row") if isinstance(paper.get("metadata_row"), dict) else None
+
+        year = paper.get("year")
+        if year is None and meta:
+            year = meta.get("year")
+
+        venue = (paper.get("venue") or "").strip()
+        if not venue and meta:
+            venue = (meta.get("venue") or "").strip()
+
+        url = (paper.get("url") or "").strip()
+        if not url and meta:
+            url = (meta.get("url") or "").strip()
+
+        authors_raw = paper.get("authors")
+        if (authors_raw is None or authors_raw == "") and meta:
+            authors_raw = meta.get("authors")
+        authors: list[str] = []
+        if isinstance(authors_raw, list):
+            for a in authors_raw:
+                if not isinstance(a, dict):
+                    continue
+                name = (a.get("name") or "").strip()
+                if name:
+                    authors.append(name)
+
+        review = paper.get("review") if isinstance(paper.get("review"), dict) else None
+        review_one_liner = (review.get("one_liner") or "").strip() if review else ""
+        review_summary = (review.get("summary") or "").strip() if review else ""
         parts: list[str] = []
         if title:
             parts.append(f"Title: {title}")
         if doi:
             parts.append(f"DOI: {doi}")
+        if year:
+            parts.append(f"Year: {year}")
+        if venue:
+            parts.append(f"Venue: {venue}")
+        if authors:
+            parts.append(f"Authors: {', '.join(authors[:12])}")
+        if url:
+            parts.append(f"URL: {url}")
+        if status:
+            parts.append(f"Status: {status}")
+        if memo:
+            parts.append(f"Memo: {memo}")
+        if review_one_liner:
+            parts.append(f"Review one-liner: {review_one_liner}")
+        if review_summary:
+            parts.append(f"Review summary: {review_summary}")
         if abstract:
             parts.append(f"Abstract: {abstract}")
         if not parts:

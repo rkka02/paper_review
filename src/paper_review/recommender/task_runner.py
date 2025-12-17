@@ -115,7 +115,11 @@ def _sync_missing_embeddings(
 
     with db_session() as db:
         papers = (
-            db.execute(select(Paper).options(selectinload(Paper.metadata_row)).order_by(desc(Paper.created_at)))
+            db.execute(
+                select(Paper)
+                .options(selectinload(Paper.metadata_row), selectinload(Paper.review))
+                .order_by(desc(Paper.created_at))
+            )
             .scalars()
             .all()
         )
@@ -138,8 +142,12 @@ def _sync_missing_embeddings(
 
     batch = 64
     upserts = 0
+    total = len(missing)
+    total_batches = (total + batch - 1) // batch
     for i in range(0, len(missing), batch):
+        batch_idx = i // batch + 1
         chunk = missing[i : i + batch]
+        _append_log(task_id, f"Embeddings: batch {batch_idx}/{total_batches} ({len(chunk)} paper(s))...")
         texts = [paper_embedding_text(p) for p in chunk]
         vecs = embedder.embed_passages(texts)
         if len(vecs) != len(chunk):
@@ -165,6 +173,7 @@ def _sync_missing_embeddings(
                     row.dim = dim
                     row.vector = vec
                 upserts += 1
+        _append_log(task_id, f"Embeddings: batch {batch_idx}/{total_batches} done ({upserts}/{total}).")
 
     _append_log(task_id, f"Embeddings: synced {upserts} paper(s).")
     return upserts
@@ -178,8 +187,11 @@ def run_recommendation_task(task_id: uuid.UUID) -> None:
 
     try:
         cfg = RecommenderConfig()
+        trigger = "manual"
         with db_session() as db:
             task = db.get(RecommendationTask, task_id)
+            if task and task.trigger:
+                trigger = str(task.trigger)
             raw = (task.config or {}) if task and isinstance(task.config, dict) else {}
             if "per_folder" in raw:
                 cfg.per_folder = int(raw["per_folder"])
@@ -206,22 +218,50 @@ def run_recommendation_task(task_id: uuid.UUID) -> None:
 
         with db_session() as db:
             folders = db.execute(select(Folder).order_by(Folder.created_at.asc())).scalars().all()
-            papers = db.execute(select(Paper).order_by(desc(Paper.created_at))).scalars().all()
+            papers = (
+                db.execute(
+                    select(Paper)
+                    .options(selectinload(Paper.metadata_row), selectinload(Paper.review))
+                    .order_by(desc(Paper.created_at))
+                )
+                .scalars()
+                .all()
+            )
 
         folders_in = [{"id": str(f.id), "name": f.name, "parent_id": str(f.parent_id) if f.parent_id else None} for f in folders]
-        paper_summaries = [
-            {
-                "paper": {
-                    "id": str(p.id),
-                    "title": p.title,
-                    "doi": p.doi,
-                    "abstract": p.abstract,
-                    "folder_id": str(p.folder_id) if p.folder_id else None,
-                },
-                "latest_run": None,
-            }
-            for p in papers
-        ]
+        paper_summaries = []
+        for p in papers:
+            meta = p.metadata_row
+            review = p.review
+            paper_summaries.append(
+                {
+                    "paper": {
+                        "id": str(p.id),
+                        "title": p.title,
+                        "doi": p.doi,
+                        "abstract": p.abstract,
+                        "folder_id": str(p.folder_id) if p.folder_id else None,
+                        "status": p.status,
+                        "memo": p.memo,
+                        "authors": (meta.authors if meta else None),
+                        "year": (meta.year if meta else None),
+                        "venue": (meta.venue if meta else None),
+                        "url": (meta.url if meta else None),
+                        "review": (
+                            {
+                                "one_liner": review.one_liner,
+                                "summary": review.summary,
+                                "pros": review.pros,
+                                "cons": review.cons,
+                                "rating_overall": review.rating_overall,
+                            }
+                            if review
+                            else None
+                        ),
+                    },
+                    "latest_run": None,
+                }
+            )
 
         _append_log(task_id, f"Loaded library: {len(folders_in)} folder(s), {len(paper_summaries)} paper(s).")
 
@@ -245,14 +285,104 @@ def run_recommendation_task(task_id: uuid.UUID) -> None:
 
         _update_task(task_id, status="succeeded", run_id=run_id, finished_at=_utcnow())
         _append_log(task_id, "Done.")
+
+        if settings.discord_notify_recommender:
+            try:
+                from paper_review.discord.webhook import send_discord_webhook
+
+                url = (settings.discord_notify_webhook_url or settings.discord_webhook_url or "").strip()
+                if url:
+                    send_discord_webhook(
+                        url=url,
+                        content=(
+                            "✅ Recommender finished\n"
+                            f"- trigger: {trigger}\n"
+                            f"- task_id: {task_id}\n"
+                            f"- run_id: {run_id}\n"
+                            f"- items: {len(payload.items)}"
+                        ),
+                        username=settings.discord_notify_username,
+                        avatar_url=settings.discord_notify_avatar_url,
+                    )
+            except Exception:
+                pass
     except Exception as e:  # noqa: BLE001
         _append_log(task_id, f"Failed: {type(e).__name__}: {e}", level="error")
         _update_task(task_id, status="failed", error=str(e), finished_at=_utcnow())
 
+        if settings.discord_notify_recommender:
+            try:
+                from paper_review.discord.webhook import send_discord_webhook
+
+                url = (settings.discord_notify_webhook_url or settings.discord_webhook_url or "").strip()
+                if url:
+                    send_discord_webhook(
+                        url=url,
+                        content=(
+                            "❌ Recommender failed\n"
+                            f"- task_id: {task_id}\n"
+                            f"- error: {type(e).__name__}: {e}"
+                        ),
+                        username=settings.discord_notify_username,
+                        avatar_url=settings.discord_notify_avatar_url,
+                    )
+            except Exception:
+                pass
+
 
 def _start_task_thread(task_id: uuid.UUID) -> None:
-    t = threading.Thread(target=run_recommendation_task, args=(task_id,), daemon=True)
+    def runner() -> None:
+        try:
+            run_recommendation_task(task_id)
+        finally:
+            with _TASK_THREADS_LOCK:
+                _TASK_THREADS.pop(task_id, None)
+
+    t = threading.Thread(target=runner, daemon=True)
+    with _TASK_THREADS_LOCK:
+        _TASK_THREADS[task_id] = t
     t.start()
+
+
+_TASK_THREADS: dict[uuid.UUID, threading.Thread] = {}
+_TASK_THREADS_LOCK = threading.Lock()
+
+
+def _is_task_thread_alive(task_id: uuid.UUID) -> bool:
+    with _TASK_THREADS_LOCK:
+        t = _TASK_THREADS.get(task_id)
+    return bool(t and t.is_alive())
+
+
+def is_task_thread_alive(task_id: uuid.UUID) -> bool:
+    return _is_task_thread_alive(task_id)
+
+
+def reconcile_stale_running_tasks() -> int:
+    """
+    Marks any `status=running` tasks as failed if there is no in-process runner thread.
+
+    This helps recover from dev server reloads / crashes (daemon thread dies, DB row stays running).
+    """
+    init_db()
+    now = _utcnow()
+
+    with db_session() as db:
+        tasks = db.execute(select(RecommendationTask).where(RecommendationTask.status == "running")).scalars().all()
+        stale = [t for t in tasks if not _is_task_thread_alive(t.id)]
+        if not stale:
+            return 0
+
+        msg = "Stale running task (no active runner in this process)."
+        for t in stale:
+            logs = list(t.logs or [])
+            logs.append({"ts": now.isoformat(), "level": "error", "message": msg})
+            t.logs = logs
+            t.status = "failed"
+            t.error = msg
+            t.finished_at = now
+            db.add(t)
+        return len(stale)
 
 
 def enqueue_recommendation_task(*, trigger: str = "manual", config: dict | None = None) -> uuid.UUID:
@@ -273,7 +403,14 @@ def enqueue_recommendation_task(*, trigger: str = "manual", config: dict | None 
             .first()
         )
         if existing_running:
-            return existing_running.id
+            if _is_task_thread_alive(existing_running.id):
+                return existing_running.id
+
+            existing_running.status = "failed"
+            existing_running.error = "Stale running task (no active runner in this process)."
+            existing_running.finished_at = _utcnow()
+            db.add(existing_running)
+            db.flush()
 
         task = RecommendationTask(
             trigger=(trigger or "manual").strip() or "manual",

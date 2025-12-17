@@ -68,6 +68,28 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _maybe_mark_stale_recommender_task(db: Session, task: RecommendationTask) -> None:
+    if not task or task.status != "running":
+        return
+    try:
+        from paper_review.recommender.task_runner import is_task_thread_alive
+
+        if is_task_thread_alive(task.id):
+            return
+    except Exception:
+        return
+
+    msg = "Stale running task (no active runner in this process)."
+    logs = list(task.logs or [])
+    logs.append({"ts": _utcnow().isoformat(), "level": "error", "message": msg})
+    task.logs = logs
+    task.status = "failed"
+    task.error = msg
+    task.finished_at = _utcnow()
+    db.add(task)
+    db.flush()
+
+
 def _extract_evidence_rows(canonical: dict) -> list[dict]:
     rows: list[dict] = []
 
@@ -270,6 +292,12 @@ def get_db() -> Session:
 @app.on_event("startup")
 def _startup() -> None:
     init_db()
+    try:
+        from paper_review.recommender.task_runner import reconcile_stale_running_tasks
+
+        reconcile_stale_running_tasks()
+    except Exception:
+        pass
     if settings.recommender_auto_run:
         from paper_review.recommender.task_runner import start_recommender_scheduler
 
@@ -569,7 +597,11 @@ def list_papers(
     folder_id: uuid.UUID | None = Query(default=None),
     unfiled: bool = Query(default=False),
 ) -> list[PaperOut]:
-    stmt = select(Paper).order_by(desc(Paper.created_at))
+    stmt = (
+        select(Paper)
+        .options(selectinload(Paper.metadata_row), selectinload(Paper.review))
+        .order_by(desc(Paper.created_at))
+    )
     if status_filter:
         stmt = stmt.where(Paper.status == status_filter)
     if folder_id is not None:
@@ -591,7 +623,11 @@ def list_papers_summary(
     folder_id: uuid.UUID | None = Query(default=None),
     unfiled: bool = Query(default=False),
 ) -> list[PaperSummaryOut]:
-    stmt = select(Paper).order_by(desc(Paper.created_at))
+    stmt = (
+        select(Paper)
+        .options(selectinload(Paper.metadata_row), selectinload(Paper.review))
+        .order_by(desc(Paper.created_at))
+    )
     if status_filter:
         stmt = stmt.where(Paper.status == status_filter)
     if folder_id is not None:
@@ -1053,6 +1089,7 @@ def get_latest_recommendation_task(db: Session = Depends(get_db)) -> Recommendat
     )
     if not task:
         raise HTTPException(status_code=404, detail="No recommendation tasks.")
+    _maybe_mark_stale_recommender_task(db, task)
     return RecommendationTaskOut.model_validate(task, from_attributes=True)
 
 
@@ -1065,6 +1102,7 @@ def get_recommendation_task(task_id: uuid.UUID, db: Session = Depends(get_db)) -
     task = db.get(RecommendationTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    _maybe_mark_stale_recommender_task(db, task)
     return RecommendationTaskOut.model_validate(task, from_attributes=True)
 
 

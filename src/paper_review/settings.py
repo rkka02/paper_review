@@ -71,6 +71,28 @@ class Settings(BaseSettings):
     worker_poll_seconds: int = Field(default=3, alias="WORKER_POLL_SECONDS")
     max_pdf_mb: int = Field(default=50, alias="MAX_PDF_MB")
 
+    discord_bot_token: str | None = Field(default=None, alias="DISCORD_BOT_TOKEN")
+    discord_webhook_url: str | None = Field(default=None, alias="DISCORD_WEBHOOK_URL")
+    discord_allowed_user_ids: str | None = Field(default=None, alias="DISCORD_ALLOWED_USER_IDS")
+    discord_allowed_guild_ids: str | None = Field(default=None, alias="DISCORD_ALLOWED_GUILD_IDS")
+
+    discord_personas_json: str | None = Field(default=None, alias="DISCORD_PERSONAS_JSON")
+    discord_persona_default_llm_provider: str = Field(default="openai", alias="DISCORD_PERSONA_DEFAULT_LLM_PROVIDER")
+
+    discord_persona_hikari_role_id: int | None = Field(default=None, alias="DISCORD_PERSONA_HIKARI_ROLE_ID")
+    discord_persona_hikari_avatar_url: str | None = Field(default=None, alias="DISCORD_PERSONA_HIKARI_AVATAR_URL")
+
+    discord_persona_rei_role_id: int | None = Field(default=None, alias="DISCORD_PERSONA_REI_ROLE_ID")
+    discord_persona_rei_avatar_url: str | None = Field(default=None, alias="DISCORD_PERSONA_REI_AVATAR_URL")
+
+    discord_persona_tsugumi_role_id: int | None = Field(default=None, alias="DISCORD_PERSONA_TSUGUMI_ROLE_ID")
+    discord_persona_tsugumi_avatar_url: str | None = Field(default=None, alias="DISCORD_PERSONA_TSUGUMI_AVATAR_URL")
+
+    discord_notify_recommender: bool = Field(default=False, alias="DISCORD_NOTIFY_RECOMMENDER")
+    discord_notify_webhook_url: str | None = Field(default=None, alias="DISCORD_NOTIFY_WEBHOOK_URL")
+    discord_notify_username: str = Field(default="paper_review", alias="DISCORD_NOTIFY_USERNAME")
+    discord_notify_avatar_url: str | None = Field(default=None, alias="DISCORD_NOTIFY_AVATAR_URL")
+
     @property
     def web_auth_enabled(self) -> bool:
         return bool(self.web_username and self.web_password)

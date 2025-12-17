@@ -1737,6 +1737,11 @@ async function startRecsTask() {
   const ok = confirm("새로 추천을 생성할까요? (잠시 걸릴 수 있어요)");
   if (!ok) return;
   try {
+    if (recsRunBtn) {
+      recsRunBtn.disabled = true;
+      recsRunBtn.textContent = "Starting…";
+    }
+    if (recsTaskMeta) recsTaskMeta.textContent = "Recommender: starting…";
     const task = await api("/api/recommendations/tasks", { method: "POST" });
     toast("Recommender started.", "info");
     renderRecsTask(task);
