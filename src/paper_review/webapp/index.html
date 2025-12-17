@@ -111,8 +111,16 @@
             <section class="card">
               <div class="row space-between">
                 <h2 class="h2">Library</h2>
-                <button id="refreshBtn" class="btn btn-secondary" type="button">Refresh</button>
+                <div class="row">
+                  <button id="newFolderBtn" class="btn btn-secondary btn-small" type="button">
+                    New folder
+                  </button>
+                  <button id="refreshBtn" class="btn btn-secondary" type="button">Refresh</button>
+                </div>
               </div>
+
+              <div id="foldersList" class="folder-list"></div>
+              <hr class="divider" />
 
               <label class="field">
                 <span class="label">Search</span>
@@ -136,6 +144,7 @@
               </div>
 
               <div id="detailMeta" class="muted"></div>
+              <div id="paperControls" class="row"></div>
               <div id="detailError" class="error"></div>
 
               <div id="detailTabs" class="tabs" data-tabs="details">

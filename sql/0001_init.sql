@@ -1,8 +1,21 @@
 -- Minimal schema based on `main.txt` (MVP).
 
+create table if not exists folders (
+  id uuid primary key,
+  user_id uuid,
+  name text not null,
+  parent_id uuid references folders(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists folders_user_id_idx on folders(user_id);
+create index if not exists folders_parent_id_idx on folders(parent_id);
+
 create table if not exists papers (
   id uuid primary key,
   user_id uuid,
+  folder_id uuid references folders(id) on delete set null,
   title text,
   doi text,
   drive_file_id text not null,
@@ -10,7 +23,6 @@ create table if not exists papers (
   pdf_size_bytes bigint,
   abstract text,
   status text not null default 'to_read' check (status in ('to_read','reading','done')),
-  tags jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -18,6 +30,20 @@ create table if not exists papers (
 create index if not exists papers_user_id_idx on papers(user_id);
 create index if not exists papers_doi_idx on papers(doi);
 create index if not exists papers_status_idx on papers(status);
+
+alter table papers add column if not exists folder_id uuid;
+
+create index if not exists papers_folder_id_idx on papers(folder_id);
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'papers_folder_id_fkey') then
+    alter table papers
+      add constraint papers_folder_id_fkey
+      foreign key (folder_id) references folders(id)
+      on delete set null;
+  end if;
+end $$;
 
 create table if not exists paper_metadata (
   paper_id uuid primary key references papers(id) on delete cascade,
@@ -81,4 +107,3 @@ create table if not exists reviews (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-

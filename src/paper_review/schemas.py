@@ -6,19 +6,38 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
+class FolderCreate(BaseModel):
+    name: str
+    parent_id: uuid.UUID | None = None
+
+
+class FolderUpdate(BaseModel):
+    name: str | None = None
+    parent_id: uuid.UUID | None = None
+
+
+class FolderOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    parent_id: uuid.UUID | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class PaperCreate(BaseModel):
     drive_file_id: str | None = None
     pdf_sha256: str | None = None
     pdf_size_bytes: int | None = None
     doi: str | None = None
     title: str | None = None
+    folder_id: uuid.UUID | None = None
 
 
 class PaperUpdate(BaseModel):
     status: str | None = None
-    tags: list[str] | None = None
     doi: str | None = None
     title: str | None = None
+    folder_id: uuid.UUID | None = None
 
 
 class PaperOut(BaseModel):
@@ -30,7 +49,7 @@ class PaperOut(BaseModel):
     pdf_size_bytes: int | None
     abstract: str | None
     status: str
-    tags: list[str]
+    folder_id: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
 

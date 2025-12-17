@@ -23,13 +23,16 @@ const createBtn = $("createBtn");
 const createStatus = $("createStatus");
 
 const refreshBtn = $("refreshBtn");
+const newFolderBtn = $("newFolderBtn");
 const paperSearch = $("paperSearch");
 const paperCount = $("paperCount");
+const foldersList = $("foldersList");
 const papersList = $("papersList");
 
 const analyzeBtn = $("analyzeBtn");
 const stopPollBtn = $("stopPollBtn");
 const detailMeta = $("detailMeta");
+const paperControls = $("paperControls");
 const detailError = $("detailError");
 const overviewView = $("overviewView");
 const personasView = $("personasView");
@@ -46,10 +49,16 @@ let selectedPaperId = null;
 let pollHandle = null;
 let authEnabled = false;
 let paperSummaries = [];
+let folders = [];
+let folderById = new Map();
+let selectedFolderMode = "all"; // all | unfiled | folder
+let selectedFolderId = null;
 let selectedDetailTab = "overview";
 let selectedPersonaId = null;
 let selectedNormalizedTab = "section_map";
 let lastDetailOutputKey = null;
+let paperMenuEl = null;
+let paperMenuToken = null;
 
 function show(el) {
   el.classList.remove("hidden");
@@ -61,6 +70,24 @@ function hide(el) {
 
 function setText(el, text) {
   el.textContent = text ?? "";
+}
+
+function folderName(folderId) {
+  if (!folderId) return null;
+  const f = folderById.get(folderId);
+  return f && typeof f.name === "string" ? f.name : null;
+}
+
+function currentFolderForNewPaper() {
+  if (selectedFolderMode === "folder" && selectedFolderId) return selectedFolderId;
+  return null;
+}
+
+function setFolderSelection(mode, folderId = null) {
+  selectedFolderMode = mode;
+  selectedFolderId = folderId;
+  renderFolders();
+  applyPapersFilter();
 }
 
 function currentTheme() {
@@ -210,6 +237,116 @@ function toast(message, type = "info", timeoutMs = 3500) {
     el.classList.remove("show");
     window.setTimeout(() => el.remove(), 220);
   }, timeoutMs);
+}
+
+function ensurePaperMenu() {
+  if (paperMenuEl) return paperMenuEl;
+  paperMenuEl = createEl("div", { className: "menu hidden", attrs: { id: "paperMenu" } });
+  document.body.appendChild(paperMenuEl);
+  return paperMenuEl;
+}
+
+function closePaperMenu() {
+  if (!paperMenuEl) return;
+  paperMenuEl.classList.add("hidden");
+  paperMenuEl.style.visibility = "";
+  paperMenuEl.style.left = "";
+  paperMenuEl.style.top = "";
+  paperMenuEl.replaceChildren();
+  paperMenuToken = null;
+  document.removeEventListener("click", onPaperMenuOutsideClick, true);
+  window.removeEventListener("resize", closePaperMenu);
+  window.removeEventListener("scroll", closePaperMenu, true);
+}
+
+function onPaperMenuOutsideClick(e) {
+  if (!paperMenuEl || paperMenuEl.classList.contains("hidden")) return;
+  const t = e.target;
+  if (t && paperMenuEl.contains(t)) return;
+  closePaperMenu();
+}
+
+function openMenu(anchorEl, token, items) {
+  const menu = ensurePaperMenu();
+  menu.replaceChildren();
+  menu.style.left = "0px";
+  menu.style.top = "0px";
+  menu.style.visibility = "hidden";
+  menu.classList.remove("hidden");
+
+  const addItem = (label, onClick, cls = "") => {
+    const btn = createEl("button", {
+      className: ["menu-item", cls].filter(Boolean).join(" "),
+      text: label,
+      attrs: { type: "button" },
+    });
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      closePaperMenu();
+      await onClick();
+    });
+    menu.appendChild(btn);
+  };
+
+  for (const it of items || []) {
+    if (!it) continue;
+    if (it.type === "sep") {
+      menu.appendChild(createEl("div", { className: "menu-sep" }));
+      continue;
+    }
+    addItem(it.label, it.onClick, it.danger ? "menu-item-danger" : "");
+  }
+
+  const rect = anchorEl.getBoundingClientRect();
+  const menuRect = menu.getBoundingClientRect();
+  const margin = 8;
+
+  let left = rect.right - menuRect.width;
+  let top = rect.bottom + 6;
+
+  if (left < margin) left = margin;
+  if (left + menuRect.width > window.innerWidth - margin) {
+    left = window.innerWidth - margin - menuRect.width;
+  }
+
+  if (top + menuRect.height > window.innerHeight - margin) {
+    top = rect.top - menuRect.height - 6;
+  }
+  if (top < margin) top = margin;
+
+  menu.style.left = `${Math.round(left)}px`;
+  menu.style.top = `${Math.round(top)}px`;
+  menu.style.visibility = "visible";
+
+  paperMenuToken = token;
+  document.addEventListener("click", onPaperMenuOutsideClick, true);
+  window.addEventListener("resize", closePaperMenu);
+  window.addEventListener("scroll", closePaperMenu, true);
+}
+
+function toggleMenu(anchorEl, token, items) {
+  if (paperMenuToken === token && paperMenuEl && !paperMenuEl.classList.contains("hidden")) {
+    closePaperMenu();
+    return;
+  }
+  openMenu(anchorEl, token, items);
+}
+
+function togglePaperMenu(anchorEl, paper) {
+  toggleMenu(anchorEl, `paper:${paper.id}`, [
+    { label: "Move...", onClick: () => movePaperPrompt(paper) },
+    { label: "Rename...", onClick: () => renamePaper(paper) },
+    { type: "sep" },
+    { label: "Delete...", danger: true, onClick: () => deletePaper(paper) },
+  ]);
+}
+
+function toggleFolderMenu(anchorEl, folder) {
+  toggleMenu(anchorEl, `folder:${folder.id}`, [
+    { label: "Rename...", onClick: () => renameFolder(folder) },
+    { type: "sep" },
+    { label: "Delete...", danger: true, onClick: () => deleteFolder(folder) },
+  ]);
 }
 
 function pill(text, variant) {
@@ -619,6 +756,234 @@ function renderDiagnostics(canonical) {
   }
 }
 
+function folderTreeRows() {
+  const byParent = new Map();
+  for (const f of folders) {
+    const parentId = f.parent_id || null;
+    if (!byParent.has(parentId)) byParent.set(parentId, []);
+    byParent.get(parentId).push(f);
+  }
+  for (const arr of byParent.values()) arr.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+
+  const out = [];
+  const walk = (parentId, depth) => {
+    for (const f of byParent.get(parentId) || []) {
+      out.push({ folder: f, depth });
+      walk(f.id, depth + 1);
+    }
+  };
+  walk(null, 0);
+  return out;
+}
+
+function folderPaperCounts() {
+  const counts = new Map();
+  for (const item of paperSummaries) {
+    const fid = item.paper?.folder_id || null;
+    if (!fid) continue;
+    counts.set(fid, (counts.get(fid) || 0) + 1);
+  }
+  return counts;
+}
+
+function renderFolders() {
+  if (!foldersList) return;
+  closePaperMenu();
+  foldersList.innerHTML = "";
+
+  const counts = folderPaperCounts();
+  const total = paperSummaries.length;
+  const unfiledCount = paperSummaries.filter((x) => !x.paper?.folder_id).length;
+
+  const renderRow = (opts) => {
+    const { id, label, depth = 0, count = null, kind = "folder", folder = null } = opts;
+    const isActive =
+      (kind === "all" && selectedFolderMode === "all") ||
+      (kind === "unfiled" && selectedFolderMode === "unfiled") ||
+      (kind === "folder" && selectedFolderMode === "folder" && selectedFolderId === id);
+
+    const row = createEl("div", { className: `folder-item ${isActive ? "active" : ""}` });
+    row.style.paddingLeft = `${8 + depth * 14}px`;
+
+    const icon = createEl("div", { className: "folder-icon", text: kind === "folder" ? "▣" : "▦" });
+    const name = createEl("div", { className: "folder-name", text: label });
+    const c = createEl("div", { className: "folder-count", text: count === null ? "" : String(count) });
+
+    row.appendChild(icon);
+    row.appendChild(name);
+    row.appendChild(c);
+
+    if (kind === "folder" && folder) {
+      const menuBtn = createEl("button", {
+        className: "paper-menu-btn",
+        text: "...",
+        attrs: { type: "button", "aria-label": "Folder actions" },
+      });
+      menuBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleFolderMenu(menuBtn, folder);
+      });
+      menuBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+      menuBtn.addEventListener("dragstart", (e) => e.preventDefault());
+      row.appendChild(menuBtn);
+    }
+
+    const dropFolderId = kind === "folder" ? id : kind === "unfiled" ? null : undefined;
+    if (dropFolderId !== undefined) {
+      row.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        row.classList.add("drop-target");
+      });
+      row.addEventListener("dragleave", () => row.classList.remove("drop-target"));
+      row.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        row.classList.remove("drop-target");
+        const paperId = e.dataTransfer ? e.dataTransfer.getData("text/paper-id") : "";
+        if (!paperId) return;
+        await setPaperFolder(paperId, dropFolderId);
+      });
+    }
+
+    row.addEventListener("click", () => {
+      closePaperMenu();
+      if (kind === "all") setFolderSelection("all");
+      else if (kind === "unfiled") setFolderSelection("unfiled");
+      else setFolderSelection("folder", id);
+    });
+
+    foldersList.appendChild(row);
+  };
+
+  renderRow({ id: null, label: "All papers", kind: "all", count: total });
+  renderRow({ id: null, label: "Unfiled", kind: "unfiled", count: unfiledCount });
+
+  for (const { folder, depth } of folderTreeRows()) {
+    renderRow({
+      id: folder.id,
+      label: folder.name,
+      depth,
+      kind: "folder",
+      folder,
+      count: counts.get(folder.id) || 0,
+    });
+  }
+}
+
+async function refreshFolders() {
+  if (!foldersList) return;
+  const items = await api("/api/folders");
+  folders = items;
+  folderById = new Map(items.map((f) => [f.id, f]));
+
+  if (selectedFolderMode === "folder" && selectedFolderId && !folderById.has(selectedFolderId)) {
+    selectedFolderMode = "all";
+    selectedFolderId = null;
+  }
+
+  renderFolders();
+}
+
+async function createFolder() {
+  const value = prompt("New folder name", "");
+  if (value === null) return;
+  const name = value.trim();
+  if (!name) {
+    toast("Folder name cannot be empty.", "error", 5000);
+    return;
+  }
+  const parentId = selectedFolderMode === "folder" ? selectedFolderId : null;
+  await api("/api/folders", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, parent_id: parentId }),
+  });
+  toast("Folder created.", "success");
+  await refreshFolders();
+}
+
+async function renameFolder(folder) {
+  const current = folder.name || "";
+  const value = prompt("Rename folder", current);
+  if (value === null) return;
+  const name = value.trim();
+  if (!name) {
+    toast("Folder name cannot be empty.", "error", 5000);
+    return;
+  }
+  await api(`/api/folders/${folder.id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  toast("Renamed.", "success");
+  await refreshFolders();
+}
+
+async function deleteFolder(folder) {
+  const ok = confirm(`Delete this folder?\n\n${folder.name}`);
+  if (!ok) return;
+  await api(`/api/folders/${folder.id}`, { method: "DELETE" });
+  toast("Folder deleted.", "success");
+  if (selectedFolderMode === "folder" && selectedFolderId === folder.id) setFolderSelection("all");
+  await refreshFolders();
+  await refreshPapers();
+}
+
+async function setPaperFolder(paperId, folderId) {
+  await api(`/api/papers/${paperId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ folder_id: folderId }),
+  });
+  toast("Moved.", "success");
+  await refreshPapers();
+  await refreshFolders();
+  if (selectedPaperId === paperId) await loadDetails(selectedPaperId);
+}
+
+async function movePaperPrompt(paper) {
+  const current = folderName(paper.folder_id) || "Unfiled";
+  const rows = folderTreeRows();
+  const options = [{ label: "Unfiled", id: null }].concat(
+    rows.map(({ folder, depth }) => ({
+      label: `${"  ".repeat(depth)}${folder.name}`,
+      id: folder.id,
+    })),
+  );
+  const lines = options.map((o, i) => `${i}: ${o.label}`).join("\n");
+  const value = prompt(`Move to which folder? (current: ${current})\n\n${lines}\n\nEnter number:`, "0");
+  if (value === null) return;
+  const idx = Number(value.trim());
+  if (!Number.isInteger(idx) || idx < 0 || idx >= options.length) {
+    toast("Invalid selection.", "error", 5000);
+    return;
+  }
+  await setPaperFolder(paper.id, options[idx].id);
+}
+
+function renderPaperControls(paper) {
+  if (!paperControls) return;
+  paperControls.replaceChildren();
+  if (!paper) return;
+
+  const folderSelect = createEl("select", { className: "select", attrs: { "aria-label": "Folder" } });
+  folderSelect.appendChild(createEl("option", { text: "Unfiled", attrs: { value: "" } }));
+  for (const { folder, depth } of folderTreeRows()) {
+    const indent = depth ? `${"  ".repeat(depth)}` : "";
+    folderSelect.appendChild(
+      createEl("option", { text: `${indent}${folder.name}`, attrs: { value: folder.id } }),
+    );
+  }
+  folderSelect.value = paper.folder_id || "";
+  folderSelect.addEventListener("change", async (e) => {
+    e.preventDefault();
+    const next = folderSelect.value || null;
+    await setPaperFolder(paper.id, next);
+  });
+
+  paperControls.appendChild(folderSelect);
+}
+
 async function renamePaper(paper) {
   const current = paper.title || "";
   const value = prompt("Rename paper (title)", current);
@@ -652,6 +1017,7 @@ async function deletePaper(paper) {
 
 function renderPapers(items) {
   papersList.innerHTML = "";
+  closePaperMenu();
   if (!items.length) {
     const empty = document.createElement("div");
     empty.className = "muted";
@@ -665,51 +1031,52 @@ function renderPapers(items) {
     const div = document.createElement("div");
     div.className = "list-item";
     if (item.paper.id === selectedPaperId) div.classList.add("active");
+    div.draggable = true;
 
-    const title = document.createElement("div");
-    title.textContent = normalizeTitle(item);
-    title.style.fontWeight = "700";
-
-    const meta = document.createElement("div");
-    meta.className = "muted";
-    meta.style.fontSize = "12px";
-    meta.textContent = `${item.paper.id}  •  doi: ${item.paper.doi || "-"}  •  status: ${item.paper.status}`;
-
-    const badge = document.createElement("div");
-    badge.className = ["badge", runBadgeClass(item.latest_run)].filter(Boolean).join(" ");
-    badge.textContent = runBadgeText(item.latest_run);
-
-    const actions = document.createElement("div");
-    actions.className = "row";
-    actions.style.marginTop = "6px";
-
-    const renameBtn = document.createElement("button");
-    renameBtn.type = "button";
-    renameBtn.className = "btn btn-secondary btn-small";
-    renameBtn.textContent = "Rename";
-    renameBtn.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      await renamePaper(item.paper);
+    div.addEventListener("dragstart", (e) => {
+      closePaperMenu();
+      div.classList.add("dragging");
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/paper-id", item.paper.id);
+      }
+    });
+    div.addEventListener("dragend", () => {
+      div.classList.remove("dragging");
     });
 
-    const deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.className = "btn btn-danger btn-small";
-    deleteBtn.textContent = "Delete";
-    deleteBtn.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      await deletePaper(item.paper);
+    const main = createEl("div", { className: "paper-main" });
+    main.appendChild(createEl("div", { className: "paper-title", text: normalizeTitle(item) }));
+
+    const p = item.paper || {};
+    const metaParts = [];
+    if (p.doi) metaParts.push(`doi: ${p.doi}`);
+    metaParts.push(`status: ${p.status || "-"}`);
+    if (selectedFolderMode === "all") {
+      const fn = folderName(p.folder_id);
+      metaParts.push(fn ? `folder: ${fn}` : "unfiled");
+    }
+    main.appendChild(createEl("div", { className: "paper-meta", text: metaParts.join(" | ") }));
+
+
+
+    const menuBtn = createEl("button", {
+      className: "paper-menu-btn",
+      text: "...",
+      attrs: { type: "button", "aria-label": "Actions" },
     });
+    menuBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      togglePaperMenu(menuBtn, item.paper);
+    });
+    menuBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+    menuBtn.addEventListener("dragstart", (e) => e.preventDefault());
 
-    actions.appendChild(renameBtn);
-    actions.appendChild(deleteBtn);
-
-    div.appendChild(title);
-    div.appendChild(meta);
-    div.appendChild(badge);
-    div.appendChild(actions);
+    div.appendChild(main);
+    div.appendChild(menuBtn);
 
     div.addEventListener("click", async () => {
+      closePaperMenu();
       selectedPaperId = item.paper.id;
       applyPapersFilter();
       await loadDetails(selectedPaperId);
@@ -766,6 +1133,7 @@ async function login() {
     });
     passwordInput.value = "";
     await refreshSession();
+    await refreshFolders();
     await refreshPapers();
   } catch (e) {
     setText(loginError, String(e.message || e));
@@ -781,18 +1149,33 @@ async function logout() {
 
 function applyPapersFilter() {
   const q = (paperSearch && paperSearch.value ? paperSearch.value : "").trim().toLowerCase();
+
+  const scoped =
+    selectedFolderMode === "unfiled"
+      ? paperSummaries.filter((x) => !x.paper?.folder_id)
+      : selectedFolderMode === "folder" && selectedFolderId
+        ? paperSummaries.filter((x) => x.paper?.folder_id === selectedFolderId)
+        : paperSummaries;
+
   const filtered = !q
-    ? paperSummaries
-    : paperSummaries.filter((item) => {
+    ? scoped
+    : scoped.filter((item) => {
         const p = item.paper || {};
         const title = normalizeTitle(item);
-        const hay = `${title} ${p.doi || ""} ${p.drive_file_id || ""} ${p.id || ""}`.toLowerCase();
+        const folder = folderName(p.folder_id) || "";
+        const hay = `${title} ${p.doi || ""} ${p.drive_file_id || ""} ${p.id || ""} ${folder}`.toLowerCase();
         return hay.includes(q);
       });
 
   if (paperCount) {
-    const text = q ? `${filtered.length} / ${paperSummaries.length}` : `${paperSummaries.length}`;
-    paperCount.textContent = `${text} papers`;
+    const scopeLabel =
+      selectedFolderMode === "all"
+        ? "All papers"
+        : selectedFolderMode === "unfiled"
+          ? "Unfiled"
+          : folderName(selectedFolderId) || "Folder";
+    const text = q ? `${filtered.length} / ${scoped.length}` : `${scoped.length}`;
+    paperCount.textContent = `${text} papers • ${scopeLabel}`;
   }
   renderPapers(filtered);
 }
@@ -800,6 +1183,7 @@ function applyPapersFilter() {
 async function refreshPapers() {
   const items = await api("/api/papers/summary");
   paperSummaries = items;
+  renderFolders();
   applyPapersFilter();
 }
 
@@ -818,6 +1202,7 @@ function applyDetailPayload(d, paperId) {
   const title = d.paper?.title || d.paper?.doi || "";
   const head = title ? `${title}  •  ` : "";
   setText(detailMeta, `${head}paper_id=${paperId}  •  run=${runStatus}`);
+  renderPaperControls(d.paper);
   setText(detailError, run?.error || "");
   setText(mdView, d.latest_content_md || "");
 
@@ -851,6 +1236,7 @@ async function loadDetails(paperId) {
 
   if (!paperId) {
     setText(detailMeta, "");
+    if (paperControls) paperControls.replaceChildren();
     if (analyzeBtn) analyzeBtn.textContent = "Analyze";
     switchDetailTab("overview");
     return;
@@ -902,6 +1288,7 @@ async function createPaper() {
     const driveFileId = driveFileIdInput ? driveFileIdInput.value.trim() || null : null;
     const file =
       pdfFileInput && pdfFileInput.files && pdfFileInput.files[0] ? pdfFileInput.files[0] : null;
+    const folderId = currentFolderForNewPaper();
 
     if (!jsonText && !jsonFile && !file && !driveFileId && !doi) {
       toast("Provide PDF, Drive file id, DOI, or analysis JSON.", "error", 5000);
@@ -912,12 +1299,14 @@ async function createPaper() {
     let paper = null;
     if (jsonText) {
       const parsed = parseJsonLoose(jsonText);
+      const params = new URLSearchParams({
+        drive_file_id: driveFileId || "",
+        doi: doi || "",
+        title: title || "",
+      });
+      if (folderId) params.set("folder_id", folderId);
       paper = await api(
-        `/api/papers/import-json?${new URLSearchParams({
-          drive_file_id: driveFileId || "",
-          doi: doi || "",
-          title: title || "",
-        }).toString()}`,
+        `/api/papers/import-json?${params.toString()}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -926,12 +1315,14 @@ async function createPaper() {
       );
     } else if (jsonFile) {
       const parsed = parseJsonLoose(await jsonFile.text());
+      const params = new URLSearchParams({
+        drive_file_id: driveFileId || "",
+        doi: doi || "",
+        title: title || "",
+      });
+      if (folderId) params.set("folder_id", folderId);
       paper = await api(
-        `/api/papers/import-json?${new URLSearchParams({
-          drive_file_id: driveFileId || "",
-          doi: doi || "",
-          title: title || "",
-        }).toString()}`,
+        `/api/papers/import-json?${params.toString()}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -939,8 +1330,10 @@ async function createPaper() {
         },
       );
     } else if (file) {
+      const params = new URLSearchParams({ doi: doi || "", title: title || "" });
+      if (folderId) params.set("folder_id", folderId);
       paper = await api(
-        `/api/papers/upload?${new URLSearchParams({ doi: doi || "", title: title || "" }).toString()}`,
+        `/api/papers/upload?${params.toString()}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/pdf" },
@@ -951,7 +1344,7 @@ async function createPaper() {
       paper = await api("/api/papers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ drive_file_id: driveFileId, doi, title }),
+        body: JSON.stringify({ drive_file_id: driveFileId, doi, title, folder_id: folderId }),
       });
     }
 
@@ -1002,7 +1395,9 @@ async function main() {
   }
 
   createBtn.addEventListener("click", createPaper);
+  if (newFolderBtn) newFolderBtn.addEventListener("click", createFolder);
   refreshBtn.addEventListener("click", async () => {
+    await refreshFolders();
     await refreshPapers();
     if (selectedPaperId) await loadDetails(selectedPaperId);
   });
@@ -1012,6 +1407,7 @@ async function main() {
 
   await refreshSession();
   if (authEnabled && !loginSection.classList.contains("hidden")) return;
+  await refreshFolders();
   await refreshPapers();
 }
 

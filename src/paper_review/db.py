@@ -6,6 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from paper_review.settings import settings
+from paper_review.migrations import apply_migrations
 
 
 class Base(DeclarativeBase):
@@ -33,3 +34,4 @@ def init_db() -> None:
     import paper_review.models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    apply_migrations(engine)

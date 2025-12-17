@@ -8,7 +8,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel, ValidationError
-from sqlalchemy import delete, desc, select
+from sqlalchemy import delete, desc, select, update
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import HTMLResponse
@@ -17,10 +17,13 @@ from starlette.staticfiles import StaticFiles
 from paper_review.analysis_output import validate_analysis
 from paper_review.db import db_session, init_db
 from paper_review.drive import upload_drive_file
-from paper_review.models import AnalysisOutput, AnalysisRun, EvidenceSnippet, Paper, PaperMetadata, Review
+from paper_review.models import AnalysisOutput, AnalysisRun, EvidenceSnippet, Folder, Paper, PaperMetadata, Review
 from paper_review.render import render_markdown
 from paper_review.schemas import (
     AnalysisRunOut,
+    FolderCreate,
+    FolderOut,
+    FolderUpdate,
     PaperCreate,
     PaperDetailOut,
     PaperOut,
@@ -105,6 +108,52 @@ def _upsert_metadata_from_analysis(db: Session, paper: Paper, canonical: dict) -
 
     db.add(row)
     db.add(paper)
+
+
+def _normalize_folder_name(raw: str) -> str:
+    name = (raw or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Folder name cannot be empty.")
+    if len(name) > 200:
+        raise HTTPException(status_code=400, detail="Folder name too long (max 200 chars).")
+    return name
+
+
+def _folder_descendant_ids(db: Session, root_id: uuid.UUID) -> list[uuid.UUID]:
+    rows = db.execute(select(Folder.id, Folder.parent_id)).all()
+    children_by_parent: dict[uuid.UUID | None, list[uuid.UUID]] = {}
+    for folder_id, parent_id in rows:
+        children_by_parent.setdefault(parent_id, []).append(folder_id)
+
+    out: list[uuid.UUID] = []
+    stack = [root_id]
+    seen: set[uuid.UUID] = set()
+    while stack:
+        folder_id = stack.pop()
+        if folder_id in seen:
+            continue
+        seen.add(folder_id)
+        out.append(folder_id)
+        for child in children_by_parent.get(folder_id, []):
+            stack.append(child)
+    return out
+
+
+def _validate_folder_parent(db: Session, folder_id: uuid.UUID, parent_id: uuid.UUID | None) -> None:
+    if parent_id is None:
+        return
+    if parent_id == folder_id:
+        raise HTTPException(status_code=400, detail="Folder cannot be its own parent.")
+    parent = db.get(Folder, parent_id)
+    if not parent:
+        raise HTTPException(status_code=400, detail="Parent folder not found.")
+    cur = parent
+    while cur.parent_id is not None:
+        if cur.parent_id == folder_id:
+            raise HTTPException(status_code=400, detail="Invalid parent (would create a cycle).")
+        cur = db.get(Folder, cur.parent_id)
+        if not cur:
+            break
 
 if settings.web_auth_enabled and not settings.session_secret:
     raise RuntimeError("SESSION_SECRET must be set when WEB_USERNAME/WEB_PASSWORD are set.")
@@ -204,6 +253,57 @@ def health() -> dict:
     return {"ok": True}
 
 
+@app.get("/api/folders", response_model=list[FolderOut], dependencies=[Depends(_require_auth)])
+def list_folders(db: Session = Depends(get_db)) -> list[FolderOut]:
+    folders = db.execute(select(Folder).order_by(Folder.name.asc())).scalars().all()
+    return [FolderOut.model_validate(f, from_attributes=True) for f in folders]
+
+
+@app.post("/api/folders", response_model=FolderOut, dependencies=[Depends(_require_auth)])
+def create_folder(payload: FolderCreate, db: Session = Depends(get_db)) -> FolderOut:
+    name = _normalize_folder_name(payload.name)
+    parent_id = payload.parent_id
+    if parent_id is not None and not db.get(Folder, parent_id):
+        raise HTTPException(status_code=400, detail="Parent folder not found.")
+
+    folder = Folder(name=name, parent_id=parent_id)
+    db.add(folder)
+    db.flush()
+    db.refresh(folder)
+    return FolderOut.model_validate(folder, from_attributes=True)
+
+
+@app.patch("/api/folders/{folder_id}", response_model=FolderOut, dependencies=[Depends(_require_auth)])
+def update_folder(folder_id: uuid.UUID, payload: FolderUpdate, db: Session = Depends(get_db)) -> FolderOut:
+    folder = db.get(Folder, folder_id)
+    if not folder:
+        raise HTTPException(status_code=404, detail="Folder not found")
+
+    if "name" in payload.model_fields_set:
+        folder.name = _normalize_folder_name(payload.name or "")
+    if "parent_id" in payload.model_fields_set:
+        _validate_folder_parent(db, folder_id, payload.parent_id)
+        folder.parent_id = payload.parent_id
+
+    db.add(folder)
+    db.flush()
+    db.refresh(folder)
+    return FolderOut.model_validate(folder, from_attributes=True)
+
+
+@app.delete("/api/folders/{folder_id}", response_model=dict, dependencies=[Depends(_require_auth)])
+def delete_folder(folder_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+    folder = db.get(Folder, folder_id)
+    if not folder:
+        raise HTTPException(status_code=404, detail="Folder not found")
+
+    ids = _folder_descendant_ids(db, folder_id)
+    db.execute(update(Paper).where(Paper.folder_id.in_(ids)).values(folder_id=None))
+    db.execute(delete(Folder).where(Folder.id.in_(ids)))
+    db.flush()
+    return {"ok": True}
+
+
 @app.post("/api/papers", response_model=PaperOut, dependencies=[Depends(_require_auth)])
 def create_paper(payload: PaperCreate, db: Session = Depends(get_db)) -> PaperOut:
     drive_file_id = (payload.drive_file_id or "").strip() or None
@@ -211,6 +311,10 @@ def create_paper(payload: PaperCreate, db: Session = Depends(get_db)) -> PaperOu
     title = (payload.title or "").strip() or None
     if not drive_file_id and not doi:
         raise HTTPException(status_code=400, detail="Provide drive_file_id and/or doi.")
+
+    folder_id = payload.folder_id
+    if folder_id is not None and not db.get(Folder, folder_id):
+        raise HTTPException(status_code=400, detail="Folder not found.")
 
     paper_id = uuid.uuid4()
     if not drive_file_id:
@@ -223,8 +327,8 @@ def create_paper(payload: PaperCreate, db: Session = Depends(get_db)) -> PaperOu
         pdf_size_bytes=payload.pdf_size_bytes,
         doi=doi,
         title=title,
-        tags=[],
         status="to_read",
+        folder_id=folder_id,
     )
     db.add(paper)
     db.flush()
@@ -238,6 +342,7 @@ async def import_paper_from_json(
     drive_file_id: str | None = Query(default=None),
     doi: str | None = Query(default=None),
     title: str | None = Query(default=None),
+    folder_id: uuid.UUID | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> PaperOut:
     try:
@@ -279,14 +384,17 @@ async def import_paper_from_json(
     if not drive_file_id:
         drive_file_id = f"{_IMPORT_JSON_PREFIX}{paper_id}"
 
+    if folder_id is not None and not db.get(Folder, folder_id):
+        raise HTTPException(status_code=400, detail="Folder not found.")
+
     paper = Paper(
         id=paper_id,
         drive_file_id=drive_file_id,
         doi=doi,
         title=title,
         abstract=paper_block.get("abstract"),
-        tags=[],
         status="to_read",
+        folder_id=folder_id,
     )
     db.add(paper)
     db.flush()
@@ -333,10 +441,16 @@ def list_papers(
     db: Session = Depends(get_db),
     status_filter: str | None = Query(default=None, alias="status"),
     q: str | None = Query(default=None),
+    folder_id: uuid.UUID | None = Query(default=None),
+    unfiled: bool = Query(default=False),
 ) -> list[PaperOut]:
     stmt = select(Paper).order_by(desc(Paper.created_at))
     if status_filter:
         stmt = stmt.where(Paper.status == status_filter)
+    if folder_id is not None:
+        stmt = stmt.where(Paper.folder_id == folder_id)
+    elif unfiled:
+        stmt = stmt.where(Paper.folder_id.is_(None))
     if q:
         like = f"%{q}%"
         stmt = stmt.where((Paper.title.ilike(like)) | (Paper.doi.ilike(like)))
@@ -349,10 +463,16 @@ def list_papers_summary(
     db: Session = Depends(get_db),
     status_filter: str | None = Query(default=None, alias="status"),
     q: str | None = Query(default=None),
+    folder_id: uuid.UUID | None = Query(default=None),
+    unfiled: bool = Query(default=False),
 ) -> list[PaperSummaryOut]:
     stmt = select(Paper).order_by(desc(Paper.created_at))
     if status_filter:
         stmt = stmt.where(Paper.status == status_filter)
+    if folder_id is not None:
+        stmt = stmt.where(Paper.folder_id == folder_id)
+    elif unfiled:
+        stmt = stmt.where(Paper.folder_id.is_(None))
     if q:
         like = f"%{q}%"
         stmt = stmt.where((Paper.title.ilike(like)) | (Paper.doi.ilike(like)))
@@ -384,6 +504,7 @@ async def upload_paper_pdf(
     request: Request,
     doi: str | None = Query(default=None),
     title: str | None = Query(default=None),
+    folder_id: uuid.UUID | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> PaperOut:
     content_type = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
@@ -422,6 +543,9 @@ async def upload_paper_pdf(
     doi = (doi or "").strip() or None
     title = (title or "").strip() or None
 
+    if folder_id is not None and not db.get(Folder, folder_id):
+        raise HTTPException(status_code=400, detail="Folder not found.")
+
     drive_file_id: str
     if settings.upload_backend.strip().lower() == "drive":
         filename = f"{paper_id}.pdf"
@@ -451,8 +575,8 @@ async def upload_paper_pdf(
         pdf_size_bytes=size,
         doi=doi,
         title=title,
-        tags=[],
         status="to_read",
+        folder_id=folder_id,
     )
     try:
         db.add(paper)
@@ -516,12 +640,14 @@ def update_paper(paper_id: uuid.UUID, payload: PaperUpdate, db: Session = Depend
 
     if payload.status is not None:
         paper.status = payload.status
-    if payload.tags is not None:
-        paper.tags = payload.tags
     if payload.doi is not None:
         paper.doi = payload.doi
     if payload.title is not None:
         paper.title = payload.title
+    if "folder_id" in payload.model_fields_set:
+        if payload.folder_id is not None and not db.get(Folder, payload.folder_id):
+            raise HTTPException(status_code=400, detail="Folder not found.")
+        paper.folder_id = payload.folder_id
 
     db.add(paper)
     db.flush()

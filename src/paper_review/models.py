@@ -5,10 +5,32 @@ from datetime import datetime
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from paper_review.db import Base
+
+
+class Folder(Base):
+    __tablename__ = "folders"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("folders.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    parent: Mapped["Folder | None"] = relationship(remote_side="Folder.id", back_populates="children")
+    children: Mapped[list["Folder"]] = relationship(back_populates="parent")
+    papers: Mapped[list["Paper"]] = relationship(back_populates="folder")
 
 
 class Paper(Base):
@@ -16,6 +38,9 @@ class Paper(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    folder_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("folders.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
     doi: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
@@ -26,9 +51,6 @@ class Paper(Base):
 
     abstract: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="to_read", index=True)
-    tags: Mapped[list[str]] = mapped_column(
-        MutableList.as_mutable(JSONB), nullable=False, default=list
-    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -46,6 +68,7 @@ class Paper(Base):
     review: Mapped["Review | None"] = relationship(
         back_populates="paper", cascade="all, delete-orphan", uselist=False
     )
+    folder: Mapped["Folder | None"] = relationship(back_populates="papers")
 
 
 class PaperMetadata(Base):
