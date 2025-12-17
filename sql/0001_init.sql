@@ -23,6 +23,7 @@ create table if not exists papers (
   pdf_size_bytes bigint,
   abstract text,
   status text not null default 'to_read' check (status in ('to_read','reading','done')),
+  memo text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -32,6 +33,7 @@ create index if not exists papers_doi_idx on papers(doi);
 create index if not exists papers_status_idx on papers(status);
 
 alter table papers add column if not exists folder_id uuid;
+alter table papers add column if not exists memo text;
 
 create index if not exists papers_folder_id_idx on papers(folder_id);
 
@@ -107,3 +109,32 @@ create table if not exists reviews (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+create table if not exists paper_links (
+  id uuid primary key,
+  user_id uuid,
+  a_paper_id uuid not null references papers(id) on delete cascade,
+  b_paper_id uuid not null references papers(id) on delete cascade,
+  source text not null default 'user',
+  meta jsonb,
+  created_at timestamptz not null default now(),
+  constraint paper_links_no_self check (a_paper_id <> b_paper_id),
+  constraint paper_links_pair_uniq unique (a_paper_id, b_paper_id)
+);
+
+alter table paper_links add column if not exists meta jsonb;
+
+create index if not exists paper_links_user_id_idx on paper_links(user_id);
+create index if not exists paper_links_a_idx on paper_links(a_paper_id);
+create index if not exists paper_links_b_idx on paper_links(b_paper_id);
+create index if not exists paper_links_source_idx on paper_links(source);
+create unique index if not exists paper_links_pair_uniq on paper_links(a_paper_id, b_paper_id);
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'paper_links_no_self') then
+    alter table paper_links
+      add constraint paper_links_no_self
+      check (a_paper_id <> b_paper_id);
+  end if;
+end $$;

@@ -45,10 +45,18 @@ const diagnosticsView = $("diagnosticsView");
 const mdView = $("mdView");
 const jsonView = $("jsonView");
 
+const graphBtn = $("graphBtn");
+const graphOverlay = $("graphOverlay");
+const graphCanvas = $("graphCanvas");
+const graphCloseBtn = $("graphCloseBtn");
+const graphSearch = $("graphSearch");
+const graphStatus = $("graphStatus");
+
 let selectedPaperId = null;
 let pollHandle = null;
 let authEnabled = false;
 let paperSummaries = [];
+let paperById = new Map();
 let folders = [];
 let folderById = new Map();
 let selectedFolderMode = "all"; // all | unfiled | folder
@@ -57,8 +65,11 @@ let selectedDetailTab = "overview";
 let selectedPersonaId = null;
 let selectedNormalizedTab = "section_map";
 let lastDetailOutputKey = null;
+let currentDetail = null;
+let overviewCtx = null;
 let paperMenuEl = null;
 let paperMenuToken = null;
+let graphState = null;
 
 function show(el) {
   el.classList.remove("hidden");
@@ -189,6 +200,20 @@ function parseJsonLoose(rawText) {
 function normalizeTitle(p) {
   const t = p.paper?.title || p.paper?.doi || p.paper?.drive_file_id || p.paper?.id;
   return t || "(untitled)";
+}
+
+function paperLabel(paper) {
+  if (!paper) return "(untitled)";
+  return paper.title || paper.doi || paper.drive_file_id || paper.id || "(untitled)";
+}
+
+function paperMetaLine(paper) {
+  if (!paper) return "";
+  const parts = [];
+  if (paper.doi) parts.push(`doi: ${paper.doi}`);
+  const fn = folderName(paper.folder_id);
+  parts.push(fn ? `folder: ${fn}` : "unfiled");
+  return parts.join(" | ");
 }
 
 function runBadgeText(run) {
@@ -472,67 +497,357 @@ function initDetailTabs() {
   switchDetailTab(selectedDetailTab);
 }
 
-function renderOverview(canonical) {
-  overviewView.replaceChildren();
-  if (!canonical) {
-    overviewView.appendChild(createEl("div", { className: "muted", text: "No analysis output yet." }));
+function renderOverview(detail, outputKey) {
+  if (!overviewView) return;
+
+  const paperOut = detail?.paper;
+  const paperId = paperOut?.id;
+  if (!paperId) {
+    overviewView.replaceChildren();
+    overviewCtx = null;
+    overviewView.appendChild(createEl("div", { className: "muted", text: "Select a paper." }));
     return;
   }
 
-  const paper = canonical.paper || {};
-  const meta = paper.metadata || {};
+  const buildSkeleton = () => {
+    overviewView.replaceChildren();
 
-  const title = meta.title || "(untitled)";
-  overviewView.appendChild(createEl("div", { className: "overview-title", text: title }));
+    const titleEl = createEl("div", { className: "overview-title" });
+    const kvEl = createEl("div", { className: "kv" });
 
-  const kv = createEl("div", { className: "kv" });
-  kv.appendChild(kvRow("Authors", renderAuthors(meta.authors)));
-  kv.appendChild(kvRow("Year", meta.year ? String(meta.year) : "-"));
-  kv.appendChild(kvRow("Venue", meta.venue || "-"));
-  kv.appendChild(kvRow("DOI", doiLink(meta.doi || "")));
-  kv.appendChild(kvRow("URL", safeLink(meta.url || "")));
-  overviewView.appendChild(kv);
+    const memoCard = createEl("div", { className: "memo-card" });
+    const memoHeader = createEl("div", { className: "memo-header" });
+    memoHeader.appendChild(createEl("div", { className: "memo-title", text: "My memo" }));
+    const memoStatus = createEl("div", { className: "memo-status muted", text: "Enter to save" });
+    memoHeader.appendChild(memoStatus);
+    memoCard.appendChild(memoHeader);
+    memoCard.appendChild(
+      createEl("div", { className: "memo-hint muted", text: "Enter: save | Shift+Enter: newline" }),
+    );
+    const memoTextarea = createEl("textarea", {
+      className: "textarea memo-textarea",
+      attrs: { rows: "4", spellcheck: "false", placeholder: "Leave a quick personal note..." },
+    });
+    memoCard.appendChild(memoTextarea);
 
-  if (paper.abstract) {
-    const abs = createEl("div", { className: "section" });
-    abs.appendChild(createEl("div", { className: "section-title", text: "Abstract" }));
-    abs.appendChild(createEl("div", { className: "prose", text: paper.abstract }));
-    overviewView.appendChild(abs);
+    const connectionsCard = createEl("div", { className: "connections-card" });
+    const connectionsHeader = createEl("div", { className: "connections-header" });
+    connectionsHeader.appendChild(createEl("div", { className: "connections-title", text: "Connections" }));
+    const connCount = pill("0", "muted");
+    connectionsHeader.appendChild(connCount);
+    connectionsCard.appendChild(connectionsHeader);
+
+    const linksList = createEl("div", { className: "link-chips" });
+    connectionsCard.appendChild(linksList);
+
+    const searchWrap = createEl("div", { className: "link-search-wrap" });
+    const searchInput = createEl("input", {
+      attrs: { type: "text", placeholder: "Search papers to connect..." },
+    });
+    const results = createEl("div", { className: "link-results hidden" });
+    searchWrap.appendChild(searchInput);
+    searchWrap.appendChild(results);
+    connectionsCard.appendChild(searchWrap);
+
+    const absHost = createEl("div", { className: "section", attrs: { id: "overviewAbstract" } });
+    const finalHost = createEl("div", { className: "section", attrs: { id: "overviewFinal" } });
+
+    overviewView.appendChild(titleEl);
+    overviewView.appendChild(kvEl);
+    overviewView.appendChild(memoCard);
+    overviewView.appendChild(connectionsCard);
+    overviewView.appendChild(absHost);
+    overviewView.appendChild(finalHost);
+
+    const setMemoStatus = (text, cls = "muted") => {
+      memoStatus.className = `memo-status ${cls}`;
+      memoStatus.textContent = text;
+    };
+
+    const hideResults = () => {
+      results.classList.add("hidden");
+      results.replaceChildren();
+    };
+
+    const saveMemo = async () => {
+      if (!overviewCtx || overviewCtx.paperId !== paperId) return;
+      const raw = overviewCtx.memoTextarea.value || "";
+      setMemoStatus("Saving...", "muted");
+      try {
+        const updated = await api(`/api/papers/${paperId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ memo: raw }),
+        });
+        const next = updated.memo ? String(updated.memo) : "";
+        overviewCtx.memoDirty = false;
+        overviewCtx.memoLastServer = next;
+        overviewCtx.memoTextarea.value = next;
+        setMemoStatus("Saved", "muted");
+        if (currentDetail && currentDetail.paper && currentDetail.paper.id === paperId) {
+          currentDetail.paper.memo = updated.memo || null;
+        }
+      } catch (e) {
+        setMemoStatus("Save failed", "error");
+        toast(String(e.message || e), "error", 6500);
+      }
+    };
+
+    const renderSearchResults = () => {
+      const qRaw = (searchInput.value || "").trim();
+      const q = qRaw.toLowerCase();
+      if (!q) {
+        hideResults();
+        return;
+      }
+
+      const linked = new Set(asArray(currentDetail?.links).map((l) => String(l.id)));
+      linked.add(String(paperId));
+
+      const matches = [];
+      for (const [id, p] of paperById.entries()) {
+        if (!id || !p) continue;
+        if (linked.has(String(id))) continue;
+        const title = paperLabel(p);
+        const folder = folderName(p.folder_id) || "";
+        const hay = `${title} ${p.doi || ""} ${p.id || ""} ${folder}`.toLowerCase();
+        if (!hay.includes(q)) continue;
+        matches.push(p);
+      }
+      matches.sort((a, b) => paperLabel(a).localeCompare(paperLabel(b)));
+      const top = matches.slice(0, 10);
+
+      results.replaceChildren();
+      if (!top.length) {
+        results.appendChild(createEl("div", { className: "muted", text: "No matches." }));
+        results.classList.remove("hidden");
+        return;
+      }
+
+      for (const p of top) {
+        const btn = createEl("button", {
+          className: "link-result",
+          attrs: { type: "button" },
+        });
+        btn.appendChild(createEl("div", { className: "link-result-title", text: paperLabel(p) }));
+        btn.appendChild(createEl("div", { className: "link-result-meta muted", text: paperMetaLine(p) }));
+        btn.addEventListener("click", async () => {
+          const otherId = p.id;
+          hideResults();
+          searchInput.value = "";
+          try {
+            await api(`/api/papers/${paperId}/links`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ other_paper_id: otherId }),
+            });
+            toast("Linked.", "success");
+            if (currentDetail && currentDetail.paper && currentDetail.paper.id === paperId) {
+              if (!Array.isArray(currentDetail.links)) currentDetail.links = [];
+              if (!currentDetail.links.some((x) => x && x.id === otherId)) {
+                currentDetail.links.push({
+                  id: otherId,
+                  title: p.title || null,
+                  doi: p.doi || null,
+                  folder_id: p.folder_id || null,
+                });
+                currentDetail.links.sort((x, y) =>
+                  (x.title || "").toLowerCase().localeCompare((y.title || "").toLowerCase()),
+                );
+              }
+              renderOverview(currentDetail, overviewCtx.outputKey || "");
+            }
+          } catch (e) {
+            toast(String(e.message || e), "error", 6500);
+          }
+        });
+        results.appendChild(btn);
+      }
+      results.classList.remove("hidden");
+    };
+
+    memoTextarea.addEventListener("input", () => {
+      if (!overviewCtx) return;
+      overviewCtx.memoDirty = true;
+      setMemoStatus("Unsaved", "muted");
+    });
+    memoTextarea.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        saveMemo();
+      }
+    });
+
+    searchInput.addEventListener("input", renderSearchResults);
+    searchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        searchInput.value = "";
+        hideResults();
+      }
+    });
+    searchInput.addEventListener("blur", () => {
+      window.setTimeout(() => {
+        const active = document.activeElement;
+        if (!active || !searchWrap.contains(active)) hideResults();
+      }, 120);
+    });
+
+    overviewCtx = {
+      paperId,
+      outputKey: null,
+      kvKey: null,
+      titleEl,
+      kvEl,
+      absHost,
+      finalHost,
+      memoTextarea,
+      memoStatus,
+      memoDirty: false,
+      memoLastServer: null,
+      linksList,
+      connCount,
+      linksKey: null,
+    };
+  };
+
+  if (!overviewCtx || overviewCtx.paperId !== paperId) buildSkeleton();
+  if (!overviewCtx) return;
+
+  const canonicalOut = detail.latest_output;
+  const canonicalPaper = canonicalOut?.paper || {};
+  const canonicalMeta = canonicalPaper.metadata || {};
+  const displayTitle =
+    paperOut.title || canonicalMeta.title || paperOut.doi || paperOut.drive_file_id || paperOut.id || "(untitled)";
+  if (overviewCtx.titleEl.textContent !== displayTitle) overviewCtx.titleEl.textContent = displayTitle;
+
+  const doiValue = canonicalMeta.doi || paperOut.doi || "";
+  const urlValue = canonicalMeta.url || "";
+  const kvKey = JSON.stringify({
+    authors: canonicalMeta.authors || null,
+    year: canonicalMeta.year || null,
+    venue: canonicalMeta.venue || "",
+    doi: doiValue,
+    url: urlValue,
+  });
+  if (kvKey !== overviewCtx.kvKey) {
+    overviewCtx.kvKey = kvKey;
+    overviewCtx.kvEl.replaceChildren();
+    overviewCtx.kvEl.appendChild(kvRow("Authors", canonicalOut ? renderAuthors(canonicalMeta.authors) : "-"));
+    overviewCtx.kvEl.appendChild(kvRow("Year", canonicalOut && canonicalMeta.year ? String(canonicalMeta.year) : "-"));
+    overviewCtx.kvEl.appendChild(kvRow("Venue", canonicalOut ? canonicalMeta.venue || "-" : "-"));
+    overviewCtx.kvEl.appendChild(kvRow("DOI", doiLink(doiValue)));
+    overviewCtx.kvEl.appendChild(kvRow("URL", safeLink(urlValue)));
   }
 
-  const final = canonical.final_synthesis || {};
-  const sec = createEl("div", { className: "section" });
-  sec.appendChild(createEl("div", { className: "section-title", text: "Final synthesis" }));
+  if (outputKey !== overviewCtx.outputKey) {
+    overviewCtx.outputKey = outputKey;
 
-  if (final.one_liner) sec.appendChild(createEl("div", { className: "one-liner", text: final.one_liner }));
+    overviewCtx.absHost.replaceChildren();
+    if (canonicalOut && canonicalPaper.abstract) {
+      overviewCtx.absHost.appendChild(createEl("div", { className: "section-title", text: "Abstract" }));
+      overviewCtx.absHost.appendChild(createEl("div", { className: "prose", text: canonicalPaper.abstract }));
+    } else if (!canonicalOut) {
+      overviewCtx.absHost.appendChild(createEl("div", { className: "muted", text: "No analysis output yet." }));
+    }
 
-  const rating = final.suggested_rating || {};
-  const ratingRow = createEl("div", { className: "row" });
-  ratingRow.appendChild(pill(`Overall ${rating.overall ?? "-"}/5`, "primary"));
-  ratingRow.appendChild(pill(`Confidence ${fmtPercent(rating.confidence)}`, "muted"));
-  sec.appendChild(ratingRow);
+    overviewCtx.finalHost.replaceChildren();
+    if (canonicalOut) {
+      const final = canonicalOut.final_synthesis || {};
+      overviewCtx.finalHost.appendChild(createEl("div", { className: "section-title", text: "Final synthesis" }));
 
-  const strengths = asArray(final.strengths);
-  if (strengths.length) {
-    sec.appendChild(createEl("div", { className: "section-subtitle", text: "Strengths" }));
-    sec.appendChild(renderBullets(strengths));
+      if (final.one_liner) overviewCtx.finalHost.appendChild(createEl("div", { className: "one-liner", text: final.one_liner }));
+
+      const rating = final.suggested_rating || {};
+      const ratingRow = createEl("div", { className: "row" });
+      ratingRow.appendChild(pill(`Overall ${rating.overall ?? "-"}/5`, "primary"));
+      ratingRow.appendChild(pill(`Confidence ${fmtPercent(rating.confidence)}`, "muted"));
+      overviewCtx.finalHost.appendChild(ratingRow);
+
+      const strengths = asArray(final.strengths);
+      if (strengths.length) {
+        overviewCtx.finalHost.appendChild(createEl("div", { className: "section-subtitle", text: "Strengths" }));
+        overviewCtx.finalHost.appendChild(renderBullets(strengths));
+      }
+
+      const weaknesses = asArray(final.weaknesses);
+      if (weaknesses.length) {
+        overviewCtx.finalHost.appendChild(createEl("div", { className: "section-subtitle", text: "Weaknesses" }));
+        overviewCtx.finalHost.appendChild(renderBullets(weaknesses));
+      }
+
+      const who = asArray(final.who_should_read);
+      if (who.length) {
+        overviewCtx.finalHost.appendChild(createEl("div", { className: "section-subtitle", text: "Who should read" }));
+        overviewCtx.finalHost.appendChild(renderBullets(who));
+      }
+
+      const ev = renderEvidenceBlock(final.evidence);
+      if (ev) overviewCtx.finalHost.appendChild(ev);
+    }
   }
 
-  const weaknesses = asArray(final.weaknesses);
-  if (weaknesses.length) {
-    sec.appendChild(createEl("div", { className: "section-subtitle", text: "Weaknesses" }));
-    sec.appendChild(renderBullets(weaknesses));
+  const memoServer = paperOut.memo ? String(paperOut.memo) : "";
+  const shouldUpdateMemo =
+    !overviewCtx.memoDirty &&
+    document.activeElement !== overviewCtx.memoTextarea &&
+    overviewCtx.memoLastServer !== memoServer;
+  if (shouldUpdateMemo) {
+    overviewCtx.memoTextarea.value = memoServer;
+    overviewCtx.memoLastServer = memoServer;
   }
 
-  const who = asArray(final.who_should_read);
-  if (who.length) {
-    sec.appendChild(createEl("div", { className: "section-subtitle", text: "Who should read" }));
-    sec.appendChild(renderBullets(who));
-  }
+  const links = asArray(detail.links);
+  const linksKey = JSON.stringify(links.map((l) => ({ id: String(l.id), title: l.title || "" })).sort((a, b) => a.id.localeCompare(b.id)));
+  if (linksKey !== overviewCtx.linksKey) {
+    overviewCtx.linksKey = linksKey;
+    overviewCtx.linksList.replaceChildren();
+    overviewCtx.connCount.textContent = String(links.length);
 
-  const ev = renderEvidenceBlock(final.evidence);
-  if (ev) sec.appendChild(ev);
-  overviewView.appendChild(sec);
+    if (!links.length) {
+      overviewCtx.linksList.appendChild(createEl("div", { className: "muted", text: "No connections yet." }));
+      return;
+    }
+
+    for (const l of links) {
+      const chip = createEl("div", { className: "link-chip" });
+      const title = l.title || l.doi || l.id || "(untitled)";
+      chip.appendChild(createEl("div", { className: "link-chip-title", text: title }));
+
+      const metaLine = [];
+      if (l.doi) metaLine.push(`doi: ${l.doi}`);
+      const fn = folderName(l.folder_id);
+      if (fn) metaLine.push(`folder: ${fn}`);
+      if (metaLine.length) chip.setAttribute("title", metaLine.join(" | "));
+
+      const removeBtn = createEl("button", {
+        className: "link-chip-remove",
+        text: "x",
+        attrs: { type: "button", "aria-label": "Remove connection" },
+      });
+      removeBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        try {
+          await api(`/api/papers/${paperId}/links/${l.id}`, { method: "DELETE" });
+          toast("Unlinked.", "info");
+          if (currentDetail && currentDetail.paper && currentDetail.paper.id === paperId && Array.isArray(currentDetail.links)) {
+            currentDetail.links = currentDetail.links.filter((x) => x && x.id !== l.id);
+          }
+          renderOverview(currentDetail, overviewCtx.outputKey || "");
+        } catch (e2) {
+          toast(String(e2.message || e2), "error", 6500);
+        }
+      });
+      chip.appendChild(removeBtn);
+
+      chip.addEventListener("click", async () => {
+        selectedPaperId = l.id;
+        applyPapersFilter();
+        await loadDetails(l.id);
+      });
+      overviewCtx.linksList.appendChild(chip);
+    }
+  }
 }
 
 function renderPersonas(canonical) {
@@ -1094,6 +1409,490 @@ function stopPolling() {
   hide(stopPollBtn);
 }
 
+function isGraphOpen() {
+  return graphOverlay && !graphOverlay.classList.contains("hidden");
+}
+
+function closeGraph() {
+  if (!graphOverlay) return;
+  graphOverlay.classList.add("hidden");
+  graphOverlay.classList.remove("dragging");
+  document.body.classList.remove("graph-open");
+  if (graphSearch) graphSearch.value = "";
+  if (graphStatus) graphStatus.textContent = "";
+
+  if (graphState && graphState.rafId) {
+    cancelAnimationFrame(graphState.rafId);
+    graphState.rafId = null;
+  }
+  if (graphState) graphState.running = false;
+  window.removeEventListener("resize", onGraphResize);
+  window.removeEventListener("keydown", onGraphKeydown, true);
+}
+
+function graphCssColors() {
+  const s = getComputedStyle(document.documentElement);
+  return {
+    text: s.getPropertyValue("--text").trim() || "#0f172a",
+    muted: s.getPropertyValue("--muted").trim() || "#475569",
+    border: s.getPropertyValue("--border").trim() || "rgba(15, 23, 42, 0.12)",
+    primary: s.getPropertyValue("--primary").trim() || "#2563eb",
+  };
+}
+
+function hashHue(text) {
+  const raw = String(text || "");
+  let h = 0;
+  for (let i = 0; i < raw.length; i += 1) h = (h * 31 + raw.charCodeAt(i)) >>> 0;
+  return h % 360;
+}
+
+function ensureGraphState() {
+  if (!graphOverlay || !graphCanvas) return null;
+  if (graphState) return graphState;
+
+  const ctx = graphCanvas.getContext("2d");
+  if (!ctx) return null;
+
+  graphState = {
+    canvas: graphCanvas,
+    ctx,
+    dpr: 1,
+    width: 0,
+    height: 0,
+    panX: 0,
+    panY: 0,
+    scale: 1,
+    nodes: [],
+    edges: [],
+    nodeById: new Map(),
+    dragging: false,
+    dragMode: null,
+    dragNode: null,
+    dragStartX: 0,
+    dragStartY: 0,
+    dragPanX: 0,
+    dragPanY: 0,
+    dragNodeOffsetX: 0,
+    dragNodeOffsetY: 0,
+    moved: false,
+    hoverId: null,
+    highlightId: null,
+    rafId: null,
+    running: false,
+    colors: graphCssColors(),
+    theme: currentTheme(),
+  };
+
+  const screenToWorld = (sx, sy) => {
+    const st = graphState;
+    return { x: (sx - st.panX) / st.scale, y: (sy - st.panY) / st.scale };
+  };
+
+  const pickNode = (sx, sy) => {
+    const st = graphState;
+    let best = null;
+    let bestD2 = Infinity;
+    for (const n of st.nodes) {
+      const px = n.x * st.scale + st.panX;
+      const py = n.y * st.scale + st.panY;
+      const r = Math.max(6, Math.min(26, n.r * st.scale));
+      const dx = px - sx;
+      const dy = py - sy;
+      const d2 = dx * dx + dy * dy;
+      if (d2 <= r * r && d2 < bestD2) {
+        best = n;
+        bestD2 = d2;
+      }
+    }
+    return best;
+  };
+
+  const onDown = (e) => {
+    if (!isGraphOpen()) return;
+    const st = graphState;
+    const rect = st.canvas.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+    const hit = pickNode(sx, sy);
+    st.dragging = true;
+    st.moved = false;
+    st.dragStartX = sx;
+    st.dragStartY = sy;
+    st.dragPanX = st.panX;
+    st.dragPanY = st.panY;
+    if (hit) {
+      st.dragMode = "node";
+      st.dragNode = hit;
+      const w = screenToWorld(sx, sy);
+      st.dragNodeOffsetX = hit.x - w.x;
+      st.dragNodeOffsetY = hit.y - w.y;
+    } else {
+      st.dragMode = "pan";
+      st.dragNode = null;
+      graphOverlay.classList.add("dragging");
+    }
+    e.preventDefault();
+  };
+
+  const onMove = (e) => {
+    if (!isGraphOpen()) return;
+    const st = graphState;
+    const rect = st.canvas.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+
+    if (st.dragging) {
+      const dx = sx - st.dragStartX;
+      const dy = sy - st.dragStartY;
+      if (Math.abs(dx) + Math.abs(dy) > 2) st.moved = true;
+
+      if (st.dragMode === "pan") {
+        st.panX = st.dragPanX + dx;
+        st.panY = st.dragPanY + dy;
+      } else if (st.dragMode === "node" && st.dragNode) {
+        const w = screenToWorld(sx, sy);
+        st.dragNode.x = w.x + st.dragNodeOffsetX;
+        st.dragNode.y = w.y + st.dragNodeOffsetY;
+        st.dragNode.vx = 0;
+        st.dragNode.vy = 0;
+      }
+      return;
+    }
+
+    const hit = pickNode(sx, sy);
+    st.hoverId = hit ? hit.id : null;
+    st.canvas.style.cursor = hit ? "pointer" : "grab";
+  };
+
+  const onUp = async (e) => {
+    if (!isGraphOpen()) return;
+    const st = graphState;
+    const wasDraggingNode = st.dragMode === "node" && st.dragNode;
+    const clickedNode = wasDraggingNode && !st.moved ? st.dragNode : null;
+
+    st.dragging = false;
+    st.dragMode = null;
+    st.dragNode = null;
+    graphOverlay.classList.remove("dragging");
+
+    if (clickedNode) {
+      closeGraph();
+      selectedPaperId = clickedNode.id;
+      applyPapersFilter();
+      await loadDetails(clickedNode.id);
+    }
+  };
+
+  const onWheel = (e) => {
+    if (!isGraphOpen()) return;
+    const st = graphState;
+    const rect = st.canvas.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+
+    const delta = Math.max(-120, Math.min(120, e.deltaY));
+    const factor = delta < 0 ? 1.12 : 1 / 1.12;
+
+    const wx = (sx - st.panX) / st.scale;
+    const wy = (sy - st.panY) / st.scale;
+    const nextScale = Math.max(0.2, Math.min(3.5, st.scale * factor));
+    st.scale = nextScale;
+    st.panX = sx - wx * st.scale;
+    st.panY = sy - wy * st.scale;
+    e.preventDefault();
+  };
+
+  graphCanvas.addEventListener("mousedown", onDown);
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+  graphCanvas.addEventListener("wheel", onWheel, { passive: false });
+
+  return graphState;
+}
+
+function onGraphResize() {
+  if (!graphState || !graphOverlay || graphOverlay.classList.contains("hidden")) return;
+  const st = graphState;
+  const rect = st.canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  st.dpr = dpr;
+  st.width = rect.width;
+  st.height = rect.height;
+  st.canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+  st.canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+  st.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  if (!st.panX && !st.panY) {
+    st.panX = rect.width / 2;
+    st.panY = rect.height / 2;
+  }
+}
+
+function onGraphKeydown(e) {
+  if (!isGraphOpen()) return;
+  if (e.key === "Escape") {
+    e.preventDefault();
+    closeGraph();
+  }
+}
+
+function graphSetData(graph) {
+  const st = graphState;
+  if (!st) return;
+
+  const nodesIn = asArray(graph?.nodes);
+  const edgesIn = asArray(graph?.edges);
+
+  const degree = new Map();
+  for (const e of edgesIn) {
+    const a = String(e.a_paper_id || "");
+    const b = String(e.b_paper_id || "");
+    if (!a || !b) continue;
+    degree.set(a, (degree.get(a) || 0) + 1);
+    degree.set(b, (degree.get(b) || 0) + 1);
+  }
+
+  const prev = st.nodeById || new Map();
+  const nodeById = new Map();
+  const nodes = [];
+
+  for (const n of nodesIn) {
+    const id = String(n.id || "");
+    if (!id) continue;
+    const old = prev.get(id) || null;
+    const d = degree.get(id) || 0;
+    const baseR = 6 + Math.sqrt(d) * 2.2;
+    const hue = hashHue(n.folder_id || id);
+    nodes.push({
+      id,
+      title: n.title || null,
+      doi: n.doi || null,
+      folder_id: n.folder_id || null,
+      x: old ? old.x : (Math.random() - 0.5) * 500,
+      y: old ? old.y : (Math.random() - 0.5) * 500,
+      vx: old ? old.vx : 0,
+      vy: old ? old.vy : 0,
+      r: baseR,
+      hue,
+    });
+  }
+
+  for (const n of nodes) nodeById.set(n.id, n);
+
+  const edges = [];
+  for (const e of edgesIn) {
+    const aId = String(e.a_paper_id || "");
+    const bId = String(e.b_paper_id || "");
+    const a = nodeById.get(aId);
+    const b = nodeById.get(bId);
+    if (!a || !b) continue;
+    edges.push({ id: String(e.id || ""), a, b, source: e.source || "user" });
+  }
+
+  st.nodes = nodes;
+  st.edges = edges;
+  st.nodeById = nodeById;
+  st.highlightId = selectedPaperId ? String(selectedPaperId) : null;
+
+  if (graphStatus) graphStatus.textContent = `${nodes.length} nodes · ${edges.length} edges`;
+}
+
+function graphStep() {
+  const st = graphState;
+  if (!st || !st.running) return;
+
+  const nodes = st.nodes;
+  const edges = st.edges;
+  const REPULSION = 9000;
+  const SPRING = 0.012;
+  const SPRING_LEN = 140;
+  const CENTER = 0.0006;
+  const DAMP = 0.86;
+  const MAX_V = 7;
+
+  for (let i = 0; i < nodes.length; i += 1) {
+    const a = nodes[i];
+    for (let j = i + 1; j < nodes.length; j += 1) {
+      const b = nodes[j];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const d2 = dx * dx + dy * dy + 0.01;
+      const invD = 1 / Math.sqrt(d2);
+      const f = (REPULSION / d2) * 0.6;
+      const fx = dx * invD * f;
+      const fy = dy * invD * f;
+      a.vx -= fx;
+      a.vy -= fy;
+      b.vx += fx;
+      b.vy += fy;
+    }
+  }
+
+  for (const e of edges) {
+    const a = e.a;
+    const b = e.b;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const d = Math.sqrt(dx * dx + dy * dy) + 0.001;
+    const diff = d - SPRING_LEN;
+    const f = diff * SPRING;
+    const fx = (dx / d) * f;
+    const fy = (dy / d) * f;
+    a.vx += fx;
+    a.vy += fy;
+    b.vx -= fx;
+    b.vy -= fy;
+  }
+
+  for (const n of nodes) {
+    if (st.dragMode === "node" && st.dragNode && st.dragNode.id === n.id) continue;
+    n.vx += -n.x * CENTER;
+    n.vy += -n.y * CENTER;
+    n.vx *= DAMP;
+    n.vy *= DAMP;
+    n.vx = Math.max(-MAX_V, Math.min(MAX_V, n.vx));
+    n.vy = Math.max(-MAX_V, Math.min(MAX_V, n.vy));
+    n.x += n.vx;
+    n.y += n.vy;
+  }
+}
+
+function graphRender() {
+  const st = graphState;
+  if (!st) return;
+
+  const theme = currentTheme();
+  if (theme !== st.theme) {
+    st.theme = theme;
+    st.colors = graphCssColors();
+  }
+
+  const ctx = st.ctx;
+  ctx.clearRect(0, 0, st.width, st.height);
+
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = st.colors.border;
+  ctx.globalAlpha = 0.85;
+
+  for (const e of st.edges) {
+    const ax = e.a.x * st.scale + st.panX;
+    const ay = e.a.y * st.scale + st.panY;
+    const bx = e.b.x * st.scale + st.panX;
+    const by = e.b.y * st.scale + st.panY;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
+  }
+
+  ctx.globalAlpha = 1;
+  for (const n of st.nodes) {
+    const x = n.x * st.scale + st.panX;
+    const y = n.y * st.scale + st.panY;
+    const r = Math.max(5, Math.min(22, n.r * st.scale));
+    const isHover = st.hoverId === n.id;
+    const isHi = st.highlightId === n.id;
+
+    const alpha = theme === "dark" ? 0.26 : 0.18;
+    const fill = `hsla(${n.hue}, 82%, 55%, ${alpha})`;
+    const stroke = isHi ? st.colors.primary : `hsla(${n.hue}, 82%, 45%, 0.6)`;
+
+    ctx.beginPath();
+    ctx.arc(x, y, r + (isHi ? 2 : 0), 0, Math.PI * 2);
+    ctx.fillStyle = fill;
+    ctx.fill();
+
+    ctx.lineWidth = isHover || isHi ? 2 : 1;
+    ctx.strokeStyle = stroke;
+    ctx.stroke();
+
+    const showLabel = st.scale >= 0.85 || isHover || isHi;
+    if (showLabel) {
+      const label = n.title || n.doi || n.id;
+      ctx.font = "12px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
+      ctx.fillStyle = st.colors.text;
+      ctx.fillText(label, x + r + 6, y + 4);
+    }
+  }
+}
+
+function graphLoop() {
+  const st = graphState;
+  if (!st) return;
+  if (!st.running) {
+    st.rafId = null;
+    return;
+  }
+  graphStep();
+  graphRender();
+  if (st.running) st.rafId = requestAnimationFrame(graphLoop);
+  else st.rafId = null;
+}
+
+function graphNodeLabel(node) {
+  if (!node) return "";
+  return String(node.title || node.doi || node.id || "");
+}
+
+function graphCenterOnNode(node) {
+  const st = graphState;
+  if (!st || !node) return;
+  st.panX = st.width / 2 - node.x * st.scale;
+  st.panY = st.height / 2 - node.y * st.scale;
+}
+
+function graphApplySearch(query, opts = {}) {
+  const st = graphState;
+  if (!st) return;
+  const center = !!opts.center;
+  const q = String(query || "").trim().toLowerCase();
+
+  if (!q) {
+    st.highlightId = selectedPaperId ? String(selectedPaperId) : null;
+    if (graphStatus) graphStatus.textContent = `${st.nodes.length} nodes · ${st.edges.length} edges`;
+    return;
+  }
+
+  const match = st.nodes.find((n) => graphNodeLabel(n).toLowerCase().includes(q)) || null;
+  st.highlightId = match ? match.id : null;
+  if (match && center) graphCenterOnNode(match);
+
+  if (graphStatus) {
+    graphStatus.textContent = match
+      ? `${st.nodes.length} nodes · ${st.edges.length} edges · 1 match`
+      : `${st.nodes.length} nodes · ${st.edges.length} edges · no match`;
+  }
+}
+
+async function openGraph() {
+  if (!graphOverlay) return;
+  closePaperMenu();
+
+  const st = ensureGraphState();
+  if (!st) return;
+
+  graphOverlay.classList.remove("hidden");
+  document.body.classList.add("graph-open");
+  window.addEventListener("resize", onGraphResize);
+  window.addEventListener("keydown", onGraphKeydown, true);
+  onGraphResize();
+
+  if (graphStatus) graphStatus.textContent = "Loading...";
+  try {
+    const g = await api("/api/graph");
+    graphSetData(g);
+    graphApplySearch(graphSearch ? graphSearch.value : "", { center: false });
+  } catch (e) {
+    toast(String(e.message || e), "error", 6500);
+    if (graphStatus) graphStatus.textContent = "Failed to load graph.";
+  }
+
+  st.running = true;
+  if (!st.rafId) st.rafId = requestAnimationFrame(graphLoop);
+  if (graphSearch) graphSearch.focus();
+}
+
 async function refreshSession() {
   const s = await api("/api/session");
   authEnabled = !!s.auth_enabled;
@@ -1102,6 +1901,7 @@ async function refreshSession() {
     hide(loginSection);
     show(appSection);
     hide(logoutBtn);
+    if (graphBtn) show(graphBtn);
     return;
   }
 
@@ -1109,12 +1909,14 @@ async function refreshSession() {
     show(loginSection);
     hide(appSection);
     hide(logoutBtn);
+    if (graphBtn) hide(graphBtn);
     return;
   }
 
   hide(loginSection);
   show(appSection);
   show(logoutBtn);
+  if (graphBtn) show(graphBtn);
 }
 
 async function login() {
@@ -1141,6 +1943,7 @@ async function login() {
 }
 
 async function logout() {
+  closeGraph();
   stopPolling();
   await api("/api/session", { method: "DELETE" });
   selectedPaperId = null;
@@ -1183,6 +1986,7 @@ function applyPapersFilter() {
 async function refreshPapers() {
   const items = await api("/api/papers/summary");
   paperSummaries = items;
+  paperById = new Map(items.map((x) => [x.paper?.id, x.paper]).filter((kv) => kv[0]));
   renderFolders();
   applyPapersFilter();
 }
@@ -1194,9 +1998,11 @@ function clearStructuredViews() {
   normalizedTabs.replaceChildren();
   normalizedContent.replaceChildren();
   diagnosticsView.replaceChildren();
+  overviewCtx = null;
 }
 
 function applyDetailPayload(d, paperId) {
+  currentDetail = d;
   const run = d.latest_run;
   const runStatus = run?.status || "-";
   const title = d.paper?.title || d.paper?.doi || "";
@@ -1213,10 +2019,10 @@ function applyDetailPayload(d, paperId) {
   }
 
   const outKey = d.latest_output ? JSON.stringify(d.latest_output) : "";
+  renderOverview(d, outKey);
   if (outKey !== lastDetailOutputKey) {
     lastDetailOutputKey = outKey;
     setText(jsonView, d.latest_output ? JSON.stringify(d.latest_output, null, 2) : "");
-    renderOverview(d.latest_output);
     renderPersonas(d.latest_output);
     renderNormalized(d.latest_output);
     renderDiagnostics(d.latest_output);
@@ -1386,6 +2192,19 @@ async function main() {
     if (e.key === "Enter") login();
   });
   logoutBtn.addEventListener("click", logout);
+  if (graphBtn) graphBtn.addEventListener("click", openGraph);
+  if (graphCloseBtn) graphCloseBtn.addEventListener("click", closeGraph);
+  if (graphSearch) {
+    graphSearch.addEventListener("input", () => {
+      graphApplySearch(graphSearch.value, { center: false });
+    });
+    graphSearch.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        graphApplySearch(graphSearch.value, { center: true });
+      }
+    });
+  }
 
   if (analysisJsonClearBtn) {
     analysisJsonClearBtn.addEventListener("click", () => {

@@ -14,6 +14,7 @@
       </div>
       <div class="spacer"></div>
       <button id="themeToggle" class="btn btn-ghost" type="button">Dark</button>
+      <button id="graphBtn" class="btn btn-secondary hidden" type="button">Graph</button>
       <button id="logoutBtn" class="btn btn-secondary hidden" type="button">Logout</button>
     </header>
 
@@ -177,6 +178,20 @@
         </section>
       </section>
     </main>
+
+    <section id="graphOverlay" class="graph-overlay hidden" aria-hidden="true">
+      <div class="graph-toolbar">
+        <div class="graph-title">Graph view</div>
+        <div class="spacer"></div>
+        <input id="graphSearch" type="text" placeholder="Search papers..." />
+        <button id="graphCloseBtn" class="btn btn-secondary btn-small" type="button">Close</button>
+      </div>
+      <div class="graph-canvas-wrap">
+        <canvas id="graphCanvas"></canvas>
+        <div class="graph-hint muted">Drag: pan | Wheel: zoom | Drag node | Click: open paper</div>
+        <div id="graphStatus" class="graph-status muted"></div>
+      </div>
+    </section>
 
     <div id="toastHost" class="toasts" aria-live="polite" aria-atomic="true"></div>
 

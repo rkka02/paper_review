@@ -38,6 +38,7 @@ class PaperUpdate(BaseModel):
     doi: str | None = None
     title: str | None = None
     folder_id: uuid.UUID | None = None
+    memo: str | None = None
 
 
 class PaperOut(BaseModel):
@@ -50,6 +51,7 @@ class PaperOut(BaseModel):
     abstract: str | None
     status: str
     folder_id: uuid.UUID | None
+    memo: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -71,11 +73,44 @@ class PaperDetailOut(BaseModel):
     latest_run: AnalysisRunOut | None = None
     latest_output: dict | None = None
     latest_content_md: str | None = None
+    links: list["PaperLinkNeighborOut"] = Field(default_factory=list)
 
 
 class PaperSummaryOut(BaseModel):
     paper: PaperOut
     latest_run: AnalysisRunOut | None = None
+
+
+class PaperLinkCreate(BaseModel):
+    other_paper_id: uuid.UUID
+
+
+class PaperLinkNeighborOut(BaseModel):
+    id: uuid.UUID
+    title: str | None
+    doi: str | None
+    folder_id: uuid.UUID | None
+
+
+class PaperLinkOut(BaseModel):
+    id: uuid.UUID
+    a_paper_id: uuid.UUID
+    b_paper_id: uuid.UUID
+    source: str
+    meta: dict | None = None
+    created_at: datetime
+
+
+class GraphNodeOut(BaseModel):
+    id: uuid.UUID
+    title: str | None
+    doi: str | None
+    folder_id: uuid.UUID | None
+
+
+class GraphOut(BaseModel):
+    nodes: list[GraphNodeOut]
+    edges: list[PaperLinkOut]
 
 
 class ReviewUpsert(BaseModel):

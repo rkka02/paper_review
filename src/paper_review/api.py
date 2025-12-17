@@ -17,15 +17,29 @@ from starlette.staticfiles import StaticFiles
 from paper_review.analysis_output import validate_analysis
 from paper_review.db import db_session, init_db
 from paper_review.drive import upload_drive_file
-from paper_review.models import AnalysisOutput, AnalysisRun, EvidenceSnippet, Folder, Paper, PaperMetadata, Review
+from paper_review.models import (
+    AnalysisOutput,
+    AnalysisRun,
+    EvidenceSnippet,
+    Folder,
+    Paper,
+    PaperLink,
+    PaperMetadata,
+    Review,
+)
 from paper_review.render import render_markdown
 from paper_review.schemas import (
     AnalysisRunOut,
     FolderCreate,
     FolderOut,
     FolderUpdate,
+    GraphOut,
+    GraphNodeOut,
     PaperCreate,
     PaperDetailOut,
+    PaperLinkCreate,
+    PaperLinkNeighborOut,
+    PaperLinkOut,
     PaperOut,
     PaperSummaryOut,
     PaperUpdate,
@@ -253,6 +267,101 @@ def health() -> dict:
     return {"ok": True}
 
 
+@app.get("/api/graph", response_model=GraphOut, dependencies=[Depends(_require_auth)])
+def graph(db: Session = Depends(get_db)) -> GraphOut:
+    papers = db.execute(select(Paper).order_by(desc(Paper.created_at))).scalars().all()
+    nodes = [
+        GraphNodeOut(
+            id=p.id,
+            title=p.title,
+            doi=p.doi,
+            folder_id=p.folder_id,
+        )
+        for p in papers
+    ]
+    edges = db.execute(select(PaperLink).order_by(desc(PaperLink.created_at))).scalars().all()
+    return GraphOut(nodes=nodes, edges=[PaperLinkOut.model_validate(e, from_attributes=True) for e in edges])
+
+
+def _canonical_pair(a: uuid.UUID, b: uuid.UUID) -> tuple[uuid.UUID, uuid.UUID]:
+    if a.int <= b.int:
+        return a, b
+    return b, a
+
+
+def _paper_neighbors(db: Session, paper_id: uuid.UUID) -> list[PaperLinkNeighborOut]:
+    links = (
+        db.execute(
+            select(PaperLink).where((PaperLink.a_paper_id == paper_id) | (PaperLink.b_paper_id == paper_id))
+        )
+        .scalars()
+        .all()
+    )
+    other_ids: list[uuid.UUID] = []
+    for link in links:
+        other_ids.append(link.b_paper_id if link.a_paper_id == paper_id else link.a_paper_id)
+
+    if not other_ids:
+        return []
+
+    papers = db.execute(select(Paper).where(Paper.id.in_(other_ids))).scalars().all()
+    paper_by_id = {p.id: p for p in papers}
+    out: list[PaperLinkNeighborOut] = []
+    for oid in other_ids:
+        p = paper_by_id.get(oid)
+        if not p:
+            continue
+        out.append(PaperLinkNeighborOut(id=p.id, title=p.title, doi=p.doi, folder_id=p.folder_id))
+    out.sort(key=lambda x: (x.title or "").lower())
+    return out
+
+
+@app.post("/api/papers/{paper_id}/links", response_model=dict, dependencies=[Depends(_require_auth)])
+def create_link(paper_id: uuid.UUID, payload: PaperLinkCreate, db: Session = Depends(get_db)) -> dict:
+    other_id = payload.other_paper_id
+    if other_id == paper_id:
+        raise HTTPException(status_code=400, detail="Cannot link a paper to itself.")
+
+    if not db.get(Paper, paper_id) or not db.get(Paper, other_id):
+        raise HTTPException(status_code=404, detail="Paper not found")
+
+    a_id, b_id = _canonical_pair(paper_id, other_id)
+    existing = (
+        db.execute(select(PaperLink).where(PaperLink.a_paper_id == a_id, PaperLink.b_paper_id == b_id))
+        .scalars()
+        .first()
+    )
+    if existing:
+        return {"ok": True, "link_id": str(existing.id)}
+
+    link = PaperLink(a_paper_id=a_id, b_paper_id=b_id, source="user", meta=None)
+    db.add(link)
+    db.flush()
+    db.refresh(link)
+    return {"ok": True, "link_id": str(link.id)}
+
+
+@app.delete("/api/papers/{paper_id}/links/{other_paper_id}", response_model=dict, dependencies=[Depends(_require_auth)])
+def delete_link(
+    paper_id: uuid.UUID, other_paper_id: uuid.UUID, db: Session = Depends(get_db)
+) -> dict:
+    if other_paper_id == paper_id:
+        raise HTTPException(status_code=400, detail="Invalid link.")
+
+    a_id, b_id = _canonical_pair(paper_id, other_paper_id)
+    link = (
+        db.execute(select(PaperLink).where(PaperLink.a_paper_id == a_id, PaperLink.b_paper_id == b_id))
+        .scalars()
+        .first()
+    )
+    if not link:
+        return {"ok": True}
+
+    db.delete(link)
+    db.flush()
+    return {"ok": True}
+
+
 @app.get("/api/folders", response_model=list[FolderOut], dependencies=[Depends(_require_auth)])
 def list_folders(db: Session = Depends(get_db)) -> list[FolderOut]:
     folders = db.execute(select(Folder).order_by(Folder.name.asc())).scalars().all()
@@ -329,6 +438,7 @@ def create_paper(payload: PaperCreate, db: Session = Depends(get_db)) -> PaperOu
         title=title,
         status="to_read",
         folder_id=folder_id,
+        memo=None,
     )
     db.add(paper)
     db.flush()
@@ -395,6 +505,7 @@ async def import_paper_from_json(
         abstract=paper_block.get("abstract"),
         status="to_read",
         folder_id=folder_id,
+        memo=None,
     )
     db.add(paper)
     db.flush()
@@ -577,6 +688,7 @@ async def upload_paper_pdf(
         title=title,
         status="to_read",
         folder_id=folder_id,
+        memo=None,
     )
     try:
         db.add(paper)
@@ -625,6 +737,7 @@ def get_paper(paper_id: uuid.UUID, db: Session = Depends(get_db)) -> PaperDetail
         latest_run=AnalysisRunOut.model_validate(run, from_attributes=True) if run else None,
         latest_output=output_json,
         latest_content_md=content_md,
+        links=_paper_neighbors(db, paper_id),
     )
 
 
@@ -648,6 +761,10 @@ def update_paper(paper_id: uuid.UUID, payload: PaperUpdate, db: Session = Depend
         if payload.folder_id is not None and not db.get(Folder, payload.folder_id):
             raise HTTPException(status_code=400, detail="Folder not found.")
         paper.folder_id = payload.folder_id
+    if "memo" in payload.model_fields_set:
+        raw = payload.memo if payload.memo is not None else ""
+        memo = raw.strip()
+        paper.memo = memo or None
 
     db.add(paper)
     db.flush()
