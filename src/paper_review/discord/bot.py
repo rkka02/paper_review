@@ -83,8 +83,7 @@ def _generate_reply_sync(*, persona: DiscordPersona, user_text: str, author_id: 
         [
             f"You are '{persona.display_name}', responding in a Discord channel.",
             "한국어로 답해.",
-            "기본 말투는 '친근한 반말'로 해. '합니다/하세요/드립니다' 같은 존댓말은 쓰지 마.",
-            "문장 끝을 자연스러운 반말 종결(~해/~했어/~야/~지)로 마무리해.",
+            "말투는 '친근한 반말'로 해.",
             "Be concise (<= 15 lines).",
             prompt,
         ]
