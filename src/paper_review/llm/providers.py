@@ -179,3 +179,123 @@ class OllamaJsonLLM:
         if isinstance(text, dict):
             return text
         return _coerce_json_object(str(text or ""))
+
+
+@dataclass(slots=True)
+class GoogleJsonLLM:
+    """
+    Gemini (Google Generative Language API) JSON helper.
+
+    Uses REST (no extra dependency) and requests JSON output.
+    """
+
+    model: str = field(default_factory=lambda: settings.google_ai_model)
+    api_key: str | None = field(default_factory=lambda: settings.google_ai_api_key)
+    timeout_seconds: int = field(default_factory=lambda: settings.google_ai_timeout_seconds)
+
+    provider: str = "google"
+
+    def generate_json(self, *, system: str, user: str, json_schema: dict[str, Any]) -> dict[str, Any]:
+        key = (self.api_key or "").strip() or (settings.google_ai_api_key or "").strip()
+        if not key:
+            raise RuntimeError("GOOGLE_AI_API_KEY is not set.")
+
+        system = (system or "").strip()
+        user = (user or "").strip()
+
+        schema = (json_schema or {}).get("schema") or {}
+        schema_hint = ""
+        try:
+            schema_hint = json.dumps(schema, ensure_ascii=False, indent=2) if schema else ""
+        except Exception:  # noqa: BLE001
+            schema_hint = ""
+
+        msg = user
+        if schema_hint:
+            msg = (
+                f"{msg}\n\n"
+                "Output format:\n"
+                "- Output ONLY a JSON object.\n"
+                "- Do not wrap in ```.\n"
+                f"- Must follow this JSON Schema:\n{schema_hint}\n"
+            )
+        else:
+            msg = (
+                f"{msg}\n\n"
+                "Output format:\n"
+                "- Output ONLY a JSON object.\n"
+                "- Do not wrap in ```.\n"
+            )
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent"
+
+        body: dict[str, Any] = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": msg}],
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.2,
+                "maxOutputTokens": 512,
+                "responseMimeType": "application/json",
+            },
+        }
+        if system:
+            body["systemInstruction"] = {"parts": [{"text": system}]}
+        if isinstance(schema, dict) and schema:
+            body["generationConfig"]["responseSchema"] = schema
+
+        timeout = httpx.Timeout(
+            connect=10.0,
+            read=float(self.timeout_seconds),
+            write=float(self.timeout_seconds),
+            pool=10.0,
+        )
+        with httpx.Client(timeout=timeout) as client:
+            try:
+                r = client.post(url, params={"key": key}, json=body)
+                r.raise_for_status()
+                payload = r.json()
+            except httpx.HTTPStatusError as e:
+                # Fallback: some deployments/models may not support responseMimeType/responseSchema.
+                status = getattr(e.response, "status_code", None)
+                if status not in {400, 404}:
+                    raise
+                fallback: dict[str, Any] = {
+                    "contents": [{"role": "user", "parts": [{"text": msg}]}],
+                    "generationConfig": {"temperature": 0.2, "maxOutputTokens": 512},
+                }
+                if system:
+                    fallback["systemInstruction"] = {"parts": [{"text": system}]}
+                r2 = client.post(url, params={"key": key}, json=fallback)
+                r2.raise_for_status()
+                payload = r2.json()
+
+        if isinstance(payload, dict) and payload.get("error"):
+            raise RuntimeError(f"Google AI error: {payload.get('error')}")
+
+        text = ""
+        if isinstance(payload, dict):
+            for cand in payload.get("candidates") or []:
+                if not isinstance(cand, dict):
+                    continue
+                content = cand.get("content")
+                if not isinstance(content, dict):
+                    continue
+                parts = content.get("parts") or []
+                if not isinstance(parts, list):
+                    continue
+                chunk = "".join(
+                    str(p.get("text") or "")
+                    for p in parts
+                    if isinstance(p, dict) and (p.get("text") is not None)
+                )
+                if chunk.strip():
+                    text = chunk
+                    break
+
+        if not str(text or "").strip():
+            raise ValueError("Empty LLM output.")
+        return _coerce_json_object(str(text))

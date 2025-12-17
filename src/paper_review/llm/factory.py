@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from paper_review.llm.providers import JsonLLM, OllamaJsonLLM, OpenAIJsonLLM
+from paper_review.llm.providers import GoogleJsonLLM, JsonLLM, OllamaJsonLLM, OpenAIJsonLLM
 from paper_review.settings import settings
 
 
@@ -8,10 +8,12 @@ def get_llm(provider: str | None) -> JsonLLM:
     p = (provider or "").strip().lower()
     if p == "openai":
         return OpenAIJsonLLM(model=settings.openai_model)
+    if p in {"google", "gemini"}:
+        return GoogleJsonLLM(model=settings.google_ai_model)
     if p in {"ollama", "local"}:
         return OllamaJsonLLM(model=settings.local_llm_model)
     raise ValueError(
-        f"Unknown LLM provider: {provider!r} (expected openai/ollama/local)."
+        f"Unknown LLM provider: {provider!r} (expected openai/google/ollama/local)."
     )
 
 

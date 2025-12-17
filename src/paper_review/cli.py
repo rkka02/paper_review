@@ -76,6 +76,8 @@ def show_config() -> None:
         "SERVER_API_KEY": "***" if settings.server_api_key else None,
         "OPENAI_MODEL": settings.openai_model,
         "OPENAI_API_KEY": "***" if settings.openai_api_key else None,
+        "GOOGLE_AI_MODEL": settings.google_ai_model,
+        "GOOGLE_AI_API_KEY": "***" if settings.google_ai_api_key else None,
         "EMBEDDINGS_PROVIDER": "openai",
         "EMBEDDINGS_NORMALIZE": settings.embeddings_normalize,
         "OPENAI_EMBED_MODEL": settings.openai_embed_model,

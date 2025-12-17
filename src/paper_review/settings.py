@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     openai_delete_files: bool = Field(default=True, alias="OPENAI_DELETE_FILES")
     openai_timeout_seconds: int = Field(default=600, alias="OPENAI_TIMEOUT_SECONDS")
 
+    google_ai_api_key: str | None = Field(default=None, alias="GOOGLE_AI_API_KEY")
+    google_ai_model: str = Field(default="gemini-1.5-flash", alias="GOOGLE_AI_MODEL")
+    google_ai_timeout_seconds: int = Field(default=120, alias="GOOGLE_AI_TIMEOUT_SECONDS")
+
     embeddings_normalize: bool = Field(default=True, alias="EMBEDDINGS_NORMALIZE")
 
     openai_embed_model: str = Field(default="text-embedding-3-large", alias="OPENAI_EMBED_MODEL")

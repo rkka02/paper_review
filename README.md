@@ -107,7 +107,7 @@ Discord에서 `@레이 우리 그 논문 어떻게 생각해?`처럼 **Role 멘�
 **B) 자유 설정(N종, 권장)**: `DISCORD_PERSONAS_JSON`
 - 각 페르소나를 Role 1개에 매핑합니다(메시지에서 `msg.role_mentions`로 판별).
 - JSON 항목 필수 키: `key`, `display_name`, `role_id`, `prompt_path`
-- 선택 키: `llm_provider`(`openai`|`ollama`), `avatar_url`
+- 선택 키: `llm_provider`(`openai`|`google`|`ollama`), `avatar_url`
 
 예시(실제 `.env`에는 한 줄로 넣는 걸 권장):
 ```env
@@ -118,6 +118,7 @@ DISCORD_PERSONA_DEFAULT_LLM_PROVIDER=openai
 ### 페르소나 답장 LLM 선택
 - 기본값: `DISCORD_PERSONA_DEFAULT_LLM_PROVIDER=openai`
 - `openai`: `OPENAI_API_KEY`, `OPENAI_MODEL` 필요
+- `google`: `GOOGLE_AI_API_KEY`, `GOOGLE_AI_MODEL` 필요
 - `ollama`: `ollama serve` 실행 + `OLLAMA_BASE_URL`, `LOCAL_LLM_MODEL` 설정
 
 ### 실행
