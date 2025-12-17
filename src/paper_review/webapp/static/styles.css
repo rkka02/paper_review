@@ -76,6 +76,7 @@ a {
   align-items: center;
   gap: 12px;
   padding: 12px 18px;
+  padding-top: calc(12px + env(safe-area-inset-top));
   border-bottom: 1px solid var(--border);
   background: rgba(244, 246, 251, 0.86);
   backdrop-filter: blur(12px);
@@ -97,6 +98,37 @@ html[data-theme="dark"] .topbar {
 
 .brand-sub {
   font-size: 12px;
+}
+
+@media (max-width: 720px) {
+  .topbar {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 12px;
+    padding-top: calc(10px + env(safe-area-inset-top));
+  }
+
+  .topbar .spacer {
+    display: none;
+  }
+
+  .brand {
+    flex: 1 1 100%;
+  }
+
+  .brand-sub {
+    display: none;
+  }
+
+  .topbar .btn {
+    padding: 7px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+  }
+
+  #themeToggle {
+    margin-left: auto;
+  }
 }
 
 .spacer {
@@ -1370,6 +1402,7 @@ body.graph-open {
   align-items: center;
   gap: 10px;
   padding: 12px 14px;
+  padding-top: calc(12px + env(safe-area-inset-top));
   border-bottom: 1px solid var(--border);
   background: rgba(244, 246, 251, 0.86);
   backdrop-filter: blur(12px);
@@ -1386,6 +1419,33 @@ html[data-theme="dark"] .graph-toolbar {
 .graph-toolbar input[type="text"] {
   width: min(420px, 50vw);
   margin: 0;
+}
+
+@media (max-width: 720px) {
+  .graph-toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 12px;
+    padding-top: calc(10px + env(safe-area-inset-top));
+  }
+
+  .graph-toolbar .spacer {
+    display: none;
+  }
+
+  .graph-title {
+    flex: 1 1 100%;
+  }
+
+  .graph-toolbar input[type="text"] {
+    width: auto;
+    flex: 1 1 220px;
+    min-width: 0;
+  }
+
+  #recsRunBtn {
+    margin-left: auto;
+  }
 }
 
 .graph-canvas-wrap {
