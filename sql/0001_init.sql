@@ -138,3 +138,15 @@ begin
       check (a_paper_id <> b_paper_id);
   end if;
 end $$;
+
+create table if not exists paper_embeddings (
+  paper_id uuid primary key references papers(id) on delete cascade,
+  provider text not null,
+  model text not null,
+  dim int not null,
+  vector jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists paper_embeddings_provider_idx on paper_embeddings(provider);

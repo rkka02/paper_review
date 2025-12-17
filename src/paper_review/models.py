@@ -69,6 +69,9 @@ class Paper(Base):
     review: Mapped["Review | None"] = relationship(
         back_populates="paper", cascade="all, delete-orphan", uselist=False
     )
+    embedding: Mapped["PaperEmbedding | None"] = relationship(
+        back_populates="paper", cascade="all, delete-orphan", uselist=False
+    )
     folder: Mapped["Folder | None"] = relationship(back_populates="papers")
 
 
@@ -211,3 +214,26 @@ class PaperLink(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+class PaperEmbedding(Base):
+    __tablename__ = "paper_embeddings"
+
+    paper_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("papers.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    model: Mapped[str] = mapped_column(String(256), nullable=False)
+    dim: Mapped[int] = mapped_column(Integer, nullable=False)
+    vector: Mapped[list[float]] = mapped_column(JSONB, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    paper: Mapped[Paper] = relationship(back_populates="embedding")

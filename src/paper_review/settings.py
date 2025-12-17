@@ -36,6 +36,16 @@ class Settings(BaseSettings):
     openai_delete_files: bool = Field(default=True, alias="OPENAI_DELETE_FILES")
     openai_timeout_seconds: int = Field(default=600, alias="OPENAI_TIMEOUT_SECONDS")
 
+    embeddings_provider: str = Field(default="local", alias="EMBEDDINGS_PROVIDER")
+    embeddings_normalize: bool = Field(default=True, alias="EMBEDDINGS_NORMALIZE")
+
+    local_embed_model: str = Field(default="intfloat/e5-base-v2", alias="LOCAL_EMBED_MODEL")
+    local_embed_device: str | None = Field(default=None, alias="LOCAL_EMBED_DEVICE")
+    local_embed_batch_size: int = Field(default=32, alias="LOCAL_EMBED_BATCH_SIZE")
+
+    openai_embed_model: str = Field(default="text-embedding-3-large", alias="OPENAI_EMBED_MODEL")
+    openai_embed_batch_size: int = Field(default=96, alias="OPENAI_EMBED_BATCH_SIZE")
+
     google_client_id: str | None = Field(default=None, alias="GOOGLE_CLIENT_ID")
     google_client_secret: str | None = Field(default=None, alias="GOOGLE_CLIENT_SECRET")
     google_refresh_token: str | None = Field(default=None, alias="GOOGLE_REFRESH_TOKEN")

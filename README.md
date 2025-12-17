@@ -100,3 +100,27 @@
 
 - 참고 SQL: `sql/0001_init.sql`
 - 앱은 개발 편의를 위해 시작 시 `create_all`로 테이블을 생성합니다(프로덕션은 마이그레이션 권장).
+
+## Local AI 테스트 (Semantic Scholar + Embeddings)
+
+로컬에서 논문 추천/검색용 임베딩 파이프라인을 먼저 검증하기 위한 **통합 테스트**가 있습니다.
+
+- 설치(예시):
+  - `pip install -r requirements-dev.txt`
+  - `pip install sentence-transformers` (CUDA torch는 conda env에서 미리 설치 권장)
+- 실행(Windows PowerShell):
+  - `$env:RUN_LOCAL_AI_TESTS="1"`
+  - `pytest -q`
+- 옵션:
+  - `$env:LOCAL_EMBED_MODEL="intfloat/e5-base-v2"`
+  - `$env:LOCAL_EMBED_DEVICE="cuda"` (없으면 자동 선택)
+  - `SEMANTIC_SCHOLAR_API_KEY`를 설정하면 rate limit에 더 안전합니다.
+- 테스트는 Semantic Scholar seed 결과를 `.pytest_cache/local_ai/semantic_scholar_seed.json`에 캐시합니다.
+
+## Embeddings DB 관리
+
+임베딩 백엔드를 바꾸는 경우(local ? OpenAI 등) 기존 벡터와 섞이지 않도록 `paper_embeddings`를 초기화하는 커맨드를 제공합니다.
+
+- 전체 초기화: `paper-review embeddings-reset --yes`
+- 재생성(현재 설정 기준): `paper-review embeddings-rebuild --yes`
+- 백엔드 강제(1회): `paper-review embeddings-rebuild --yes --provider openai` (또는 `local`)

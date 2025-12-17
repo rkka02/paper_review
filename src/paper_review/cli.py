@@ -11,7 +11,7 @@ import socket
 import typer
 from rich import print
 
-from paper_review.db import init_db
+from paper_review.db import db_session, init_db
 from paper_review.settings import settings
 
 app = typer.Typer(add_completion=False, help="paper-review CLI")
@@ -73,6 +73,13 @@ def show_config() -> None:
         "DATABASE_URL": _redact_secrets(settings.database_url),
         "OPENAI_MODEL": settings.openai_model,
         "OPENAI_API_KEY": "***" if settings.openai_api_key else None,
+        "EMBEDDINGS_PROVIDER": settings.embeddings_provider,
+        "EMBEDDINGS_NORMALIZE": settings.embeddings_normalize,
+        "LOCAL_EMBED_MODEL": settings.local_embed_model,
+        "LOCAL_EMBED_DEVICE": settings.local_embed_device,
+        "LOCAL_EMBED_BATCH_SIZE": settings.local_embed_batch_size,
+        "OPENAI_EMBED_MODEL": settings.openai_embed_model,
+        "OPENAI_EMBED_BATCH_SIZE": settings.openai_embed_batch_size,
         "GOOGLE_CLIENT_ID": "***" if settings.google_client_id else None,
         "GOOGLE_REFRESH_TOKEN": "***" if settings.google_refresh_token else None,
         "GOOGLE_SERVICE_ACCOUNT_FILE": settings.google_service_account_file,
@@ -127,3 +134,46 @@ def analyze(paper_id: str) -> None:
 
     enqueue_analysis_run(uuid.UUID(paper_id))
     print("[green]OK[/green] enqueued.")
+
+
+@app.command()
+def embeddings_reset(
+    yes: bool = typer.Option(False, "--yes", "-y", help="Do not prompt; reset immediately."),
+) -> None:
+    """Delete all stored paper embeddings (use when changing embedding provider/model)."""
+    init_db()
+    if not yes:
+        ok = typer.confirm("This will delete all rows in paper_embeddings. Continue?", default=False)
+        if not ok:
+            raise typer.Exit(code=1)
+
+    from paper_review.embeddings.store import reset_paper_embeddings
+
+    with db_session() as db:
+        removed = reset_paper_embeddings(db)
+    print(f"[green]OK[/green] removed {removed} embeddings.")
+
+
+@app.command()
+def embeddings_rebuild(
+    provider: str | None = typer.Option(None, help="Override EMBEDDINGS_PROVIDER for this run."),
+    limit: int | None = typer.Option(None, help="Only embed the newest N papers (debug)."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Do not prompt; proceed immediately."),
+) -> None:
+    """(Re)build embeddings for papers in the DB using the configured embedding backend."""
+    init_db()
+    if not yes:
+        ok = typer.confirm(
+            "This will write embeddings into paper_embeddings (and may reset them if provider/model changed). Continue?",
+            default=False,
+        )
+        if not ok:
+            raise typer.Exit(code=1)
+
+    from paper_review.embeddings import get_embedder
+    from paper_review.embeddings.store import rebuild_paper_embeddings
+
+    embedder = get_embedder(provider)
+    with db_session() as db:
+        result = rebuild_paper_embeddings(db, embedder, limit=limit, reset_if_changed=True)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
