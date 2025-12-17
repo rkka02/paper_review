@@ -92,12 +92,22 @@ html[data-theme="dark"] .topbar {
 }
 
 .brand-name {
-  font-weight: 800;
-  letter-spacing: 0.2px;
+  font-weight: 950;
+  letter-spacing: 0.3px;
+  font-size: 18px;
 }
 
 .brand-sub {
   font-size: 12px;
+}
+
+@supports (-webkit-background-clip: text) or (background-clip: text) {
+  .brand-name {
+    background: linear-gradient(90deg, var(--primary), var(--text));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
 }
 
 @media (max-width: 720px) {
@@ -106,6 +116,7 @@ html[data-theme="dark"] .topbar {
     gap: 8px;
     padding: 10px 12px;
     padding-top: calc(10px + env(safe-area-inset-top));
+    justify-content: center;
   }
 
   .topbar .spacer {
@@ -114,6 +125,8 @@ html[data-theme="dark"] .topbar {
 
   .brand {
     flex: 1 1 100%;
+    justify-items: center;
+    text-align: center;
   }
 
   .brand-sub {
@@ -124,10 +137,6 @@ html[data-theme="dark"] .topbar {
     padding: 7px 10px;
     border-radius: 10px;
     font-size: 12px;
-  }
-
-  #themeToggle {
-    margin-left: auto;
   }
 }
 
@@ -1427,6 +1436,7 @@ html[data-theme="dark"] .graph-toolbar {
     gap: 8px;
     padding: 10px 12px;
     padding-top: calc(10px + env(safe-area-inset-top));
+    justify-content: center;
   }
 
   .graph-toolbar .spacer {
@@ -1435,16 +1445,13 @@ html[data-theme="dark"] .graph-toolbar {
 
   .graph-title {
     flex: 1 1 100%;
+    text-align: center;
   }
 
   .graph-toolbar input[type="text"] {
     width: auto;
     flex: 1 1 220px;
     min-width: 0;
-  }
-
-  #recsRunBtn {
-    margin-left: auto;
   }
 }
 
