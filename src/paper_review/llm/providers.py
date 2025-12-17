@@ -104,6 +104,14 @@ def _coerce_json_object(raw: str) -> dict[str, Any]:
     raise ValueError(f"Invalid JSON output: {last_err}. Output snippet:\n{snippet}") from last_err
 
 
+class LLMOutputParseError(ValueError):
+    def __init__(self, message: str, *, provider: str, model: str, raw_output: str):
+        super().__init__(message)
+        self.provider = provider
+        self.model = model
+        self.raw_output = raw_output
+
+
 @dataclass(slots=True)
 class OpenAIJsonLLM:
     model: str = field(default_factory=lambda: settings.openai_model)
@@ -254,63 +262,6 @@ class GoogleJsonLLM:
 
     provider: str = "google"
 
-    @staticmethod
-    def _is_simple_reply_schema(json_schema: dict[str, Any]) -> bool:
-        schema = (json_schema or {}).get("schema")
-        if not isinstance(schema, dict):
-            return False
-        if schema.get("type") != "object":
-            return False
-        props = schema.get("properties")
-        if not isinstance(props, dict):
-            return False
-        reply = props.get("reply")
-        if not isinstance(reply, dict):
-            return False
-        if reply.get("type") != "string":
-            return False
-        req = schema.get("required")
-        if not isinstance(req, list) or "reply" not in req:
-            return False
-        return True
-
-    @staticmethod
-    def _extract_reply_best_effort(raw: str) -> str:
-        text = (raw or "").strip()
-        if not text:
-            return ""
-
-        if "```" in text:
-            lines: list[str] = []
-            in_block = False
-            for line in text.splitlines():
-                if line.strip().startswith("```"):
-                    in_block = not in_block
-                    continue
-                if in_block:
-                    lines.append(line)
-            if lines:
-                text = "\n".join(lines).strip()
-
-        for pattern in [
-            r'"reply"\s*:\s*"(.*)"\s*[,}]',
-            r"'reply'\s*:\s*'(.*)'\s*[,}]",
-        ]:
-            m = re.search(pattern, text, flags=re.DOTALL)
-            if not m:
-                continue
-            val = (m.group(1) or "").strip()
-            # Best-effort unescaping for common sequences.
-            val = (
-                val.replace("\\r\\n", "\n")
-                .replace("\\n", "\n")
-                .replace("\\t", "\t")
-                .replace('\\"', '"')
-            )
-            return val.strip()
-
-        return text.strip()
-
     def generate_json(self, *, system: str, user: str, json_schema: dict[str, Any]) -> dict[str, Any]:
         key = (self.api_key or "").strip() or (settings.google_ai_api_key or "").strip()
         if not key:
@@ -417,8 +368,10 @@ class GoogleJsonLLM:
         raw = str(text)
         try:
             return _coerce_json_object(raw)
-        except Exception:
-            # Discord persona replies: allow plain-text fallbacks if the model doesn't emit strict JSON.
-            if self._is_simple_reply_schema(json_schema):
-                return {"reply": self._extract_reply_best_effort(raw)}
-            raise
+        except Exception as e:  # noqa: BLE001
+            raise LLMOutputParseError(
+                f"Failed to parse JSON output ({type(e).__name__}: {e}).",
+                provider=self.provider,
+                model=self.model,
+                raw_output=raw,
+            ) from e

@@ -14,6 +14,7 @@ from paper_review.discord.personas import (
 )
 from paper_review.discord.webhook import send_discord_webhook
 from paper_review.llm import get_llm
+from paper_review.llm.providers import LLMOutputParseError
 from paper_review.settings import settings
 
 
@@ -102,6 +103,18 @@ def _generate_reply_sync(*, persona: DiscordPersona, user_text: str, author_id: 
     return reply
 
 
+def _split_discord_chunks(text: str, *, chunk_size: int = 1500) -> list[str]:
+    s = str(text or "")
+    if not s:
+        return [""]
+    out: list[str] = []
+    i = 0
+    while i < len(s):
+        out.append(s[i : i + chunk_size])
+        i += chunk_size
+    return out
+
+
 async def run_discord_bot() -> None:
     token = (settings.discord_bot_token or "").strip()
     if not token:
@@ -184,22 +197,36 @@ async def run_discord_bot() -> None:
             return
 
         async with lock:
+            messages: list[str] = []
             try:
                 reply = await asyncio.to_thread(
                     _generate_reply_sync, persona=persona, user_text=user_text, author_id=author_id
                 )
+                messages = [f"<@{author_id}> {reply}"]
+            except LLMOutputParseError as e:
+                messages = [
+                    f"<@{author_id}> Error: {type(e).__name__}: {e}\n"
+                    f"(provider={e.provider} model={e.model})\n"
+                    "아래는 디버깅용 원본 출력입니다:",
+                ]
+                raw = e.raw_output or ""
+                chunks = _split_discord_chunks(raw, chunk_size=1500)
+                total = len(chunks)
+                for idx, chunk in enumerate(chunks, start=1):
+                    messages.append(f"Gemini raw output ({idx}/{total}):\n```text\n{chunk}\n```")
             except Exception as e:  # noqa: BLE001
-                reply = f"Error: {type(e).__name__}: {e}"
+                messages = [f"<@{author_id}> Error: {type(e).__name__}: {e}"]
 
-            try:
-                await asyncio.to_thread(
-                    send_discord_webhook,
-                    url=webhook_url,
-                    content=f"<@{author_id}> {reply}",
-                    username=persona.display_name,
-                    avatar_url=persona.avatar_url,
-                )
-            except Exception as e:  # noqa: BLE001
-                logging.getLogger(__name__).warning("Discord webhook send failed: %s", e)
+            for msg in messages:
+                try:
+                    await asyncio.to_thread(
+                        send_discord_webhook,
+                        url=webhook_url,
+                        content=msg,
+                        username=persona.display_name,
+                        avatar_url=persona.avatar_url,
+                    )
+                except Exception as e:  # noqa: BLE001
+                    logging.getLogger(__name__).warning("Discord webhook send failed: %s", e)
 
     await client.start(token)
