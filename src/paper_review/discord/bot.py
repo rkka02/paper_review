@@ -123,7 +123,15 @@ async def run_discord_bot() -> None:
     try:
         import discord  # type: ignore
     except Exception as e:  # noqa: BLE001
-        raise RuntimeError("Missing dependency: install `discord.py`.") from e
+        raise RuntimeError(
+            "Missing dependency: discord.py.\n"
+            "Install it in the *same* Python environment you use to run `paper-review`:\n"
+            "- `pip install -e .`\n"
+            "- or `pip install -r requirements.txt`\n"
+            "- or `pip install discord.py`\n"
+            "\n"
+            "Tip (Windows): activate the venv first: `.venv\\Scripts\\Activate.ps1`."
+        ) from e
 
     intents = discord.Intents.default()
     intents.message_content = True

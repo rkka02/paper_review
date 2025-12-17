@@ -83,33 +83,59 @@
 
 - API URL에서 `/health` 확인 후, 루트(`/`)로 접속해 Web UI 로그인/등록/분석
 
-## Discord (Role 멘션 → 페르소나 답장)
+## Discord (Role 멘션 → 멀티-페르소나 답장)
 
-Discord에서 `@히카리/@레이/@츠구미` 같은 **Role 멘션**으로 서버에 질문하면, 봇이 메시지를 수신하고 **웹훅으로 페르소나 이름/아이콘**으로 답장하는 구조입니다.
+Discord에서 `@레이 우리 그 논문 어떻게 생각해?`처럼 **Role 멘션**으로 서버에 질문하면, 봇이 메시지를 수신하고 **Webhook**으로 “페르소나 이름/아이콘”으로 답장합니다.
 
-### 준비
-- Discord Bot 생성 + `MESSAGE CONTENT INTENT` 활성화
-- 서버(길드)에 Bot 초대(권한: Read/Send + Role 멘션 읽기)
-- 채널에 Webhook 생성 후 URL 확보
-- Role 3개 생성(예: 히카리/레이/츠구미) + 각 Role ID 확보
+### 준비 (Discord 설정)
+- Discord 설정 → 고급(Advanced) → **Developer Mode** ON
+- 페르소나별 Role 생성(예: 히카리/레이/츠구미) 후, Role 우클릭 → **Copy ID**
+- Discord Bot 생성 후 **MESSAGE CONTENT INTENT** ON, 서버(길드)에 초대
+- 답장을 보낼 채널에서 Webhook 생성 후 URL 확보
 
-### 환경변수(.env)
-- 필수: `DISCORD_BOT_TOKEN`, `DISCORD_WEBHOOK_URL`
-- 페르소나 Role ID:
-  - `DISCORD_PERSONA_HIKARI_ROLE_ID`, `DISCORD_PERSONA_REI_ROLE_ID`, `DISCORD_PERSONA_TSUGUMI_ROLE_ID`
-  - (선택) `DISCORD_PERSONA_*_AVATAR_URL`
+### 환경변수(.env) - 공통
+- 필수: `DISCORD_BOT_TOKEN`(수신), `DISCORD_WEBHOOK_URL`(발신)
 - 접근 제한(선택): `DISCORD_ALLOWED_USER_IDS`, `DISCORD_ALLOWED_GUILD_IDS` (comma-separated)
+- 주의: 현재는 `DISCORD_WEBHOOK_URL` **1개 채널**로만 답장합니다(여러 채널 분기는 추후 확장 필요).
+
+### 멀티 페르소나 설정 방법
+**A) 간단 설정(기본 3종)**: 히카리/레이/츠구미
+- Role ID 지정: `DISCORD_PERSONA_HIKARI_ROLE_ID`, `DISCORD_PERSONA_REI_ROLE_ID`, `DISCORD_PERSONA_TSUGUMI_ROLE_ID`
+- 프롬프트 수정: `docs/personas/hikari.md`, `docs/personas/rei.md`, `docs/personas/tsugumi.md`
+- (선택) 아바타: `DISCORD_PERSONA_*_AVATAR_URL`
+
+**B) 자유 설정(N종, 권장)**: `DISCORD_PERSONAS_JSON`
+- 각 페르소나를 Role 1개에 매핑합니다(메시지에서 `msg.role_mentions`로 판별).
+- JSON 항목 필수 키: `key`, `display_name`, `role_id`, `prompt_path`
+- 선택 키: `llm_provider`(`openai`|`ollama`), `avatar_url`
+
+예시(실제 `.env`에는 한 줄로 넣는 걸 권장):
+```env
+DISCORD_PERSONAS_JSON=[{"key":"hikari","display_name":"히카리","role_id":111,"prompt_path":"docs/personas/hikari.md","llm_provider":"openai"},{"key":"rei","display_name":"레이","role_id":222,"prompt_path":"docs/personas/rei.md","llm_provider":"openai"},{"key":"tsugumi","display_name":"츠구미","role_id":333,"prompt_path":"docs/personas/tsugumi.md","llm_provider":"ollama"}]
+DISCORD_PERSONA_DEFAULT_LLM_PROVIDER=openai
+```
+
+### 페르소나 답장 LLM 선택
+- 기본값: `DISCORD_PERSONA_DEFAULT_LLM_PROVIDER=openai`
+- `openai`: `OPENAI_API_KEY`, `OPENAI_MODEL` 필요
+- `ollama`: `ollama serve` 실행 + `OLLAMA_BASE_URL`, `LOCAL_LLM_MODEL` 설정
 
 ### 실행
-- Bot만 실행: `paper-review discord-bot`
+- Bot 실행: `paper-review discord-bot`
 - PaaS에서 포트가 필요하면: `paper-review discord-bot-serve --host 0.0.0.0 --port $PORT`
+- 참고: Discord Bot은 서버 API를 호출하지 않고 DB를 직접 읽습니다 → `DATABASE_URL`이 서버와 동일해야 합니다.
 
-## Discord 알림(추천 완료)
+### 사용 팁
+- 한 메시지에는 페르소나 Role을 **1개만** 멘션하세요(여러 개면 어떤 페르소나로 처리될지 보장되지 않음).
+- 특정 논문을 지정하려면 DOI 또는 paper id(UUID)를 같이 보내면 정확도가 올라갑니다.
 
-서버에서 추천 작업이 끝나면 Discord 웹훅으로 알립니다.
+### Discord 알림(추천 완료/실패)
+추천 작업(수동 Run / 스케줄러 auto-run)이 끝나면 Discord 웹훅으로 알립니다.
 
 - `DISCORD_NOTIFY_RECOMMENDER=true`
 - (선택) `DISCORD_NOTIFY_WEBHOOK_URL` (없으면 `DISCORD_WEBHOOK_URL` 사용)
+- (선택) `DISCORD_NOTIFY_USERNAME`, `DISCORD_NOTIFY_AVATAR_URL`
+- (스케줄러) `RECOMMENDER_AUTO_RUN=true`, `RECOMMENDER_AUTO_RUN_TIME=06:00`
 
 ## API 사용 예시
 
