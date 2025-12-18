@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import threading
 import time
 import uuid
@@ -27,6 +28,125 @@ from paper_review.settings import settings
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _clip(text: str | None, n: int) -> str | None:
+    t = (text or "").strip()
+    if not t:
+        return None
+    if len(t) <= n:
+        return t
+    return t[:n].rstrip() + "…"
+
+
+def _folder_path(folder_id: str | None, folders_by_id: dict[str, dict]) -> str | None:
+    if not folder_id:
+        return None
+    names: list[str] = []
+    cur: str | None = folder_id
+    seen: set[str] = set()
+    while cur and cur in folders_by_id and cur not in seen:
+        seen.add(cur)
+        f = folders_by_id[cur]
+        name = (f.get("name") or "").strip()
+        if name:
+            names.append(name)
+        cur = (f.get("parent_id") or None)
+    if not names:
+        return None
+    return "/".join(reversed(names))
+
+
+def _split_chunks(text: str, *, chunk_size: int = 1800) -> list[str]:
+    s = (text or "").strip()
+    if not s:
+        return [""]
+    out: list[str] = []
+    i = 0
+    while i < len(s):
+        out.append(s[i : i + chunk_size])
+        i += chunk_size
+    return out
+
+
+def _discord_recommender_notify_schema() -> dict:
+    return {
+        "name": "discord_recommender_notification",
+        "schema": {
+            "type": "object",
+            "properties": {"content": {"type": "string"}},
+            "required": ["content"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    }
+
+
+def _build_llm_discord_notification(
+    *,
+    llm,
+    trigger: str,
+    payload,
+    folders_in: list[dict],
+) -> str:
+    folders_by_id = {str(f.get("id")): f for f in (folders_in or []) if isinstance(f, dict) and f.get("id")}
+
+    groups: dict[str, list[dict]] = {}
+    for item in payload.items or []:
+        kind = (item.kind or "").strip() or "folder"
+        fid = str(item.folder_id) if getattr(item, "folder_id", None) else None
+        folder_label = _folder_path(fid, folders_by_id) or (folders_by_id.get(fid or "", {}).get("name") or "").strip()
+        group = "Cross-domain" if kind == "cross_domain" else (folder_label or "Unfiled")
+
+        groups.setdefault(group, []).append(
+            {
+                "rank": int(item.rank),
+                "title": (item.title or "").strip(),
+                "year": item.year,
+                "venue": (item.venue or "").strip() if item.venue else None,
+                "doi": (item.doi or "").strip() if item.doi else None,
+                "url": (item.url or "").strip() if item.url else None,
+                "score": float(item.score) if item.score is not None else None,
+                "one_liner": _clip(item.one_liner, 220),
+                "summary": _clip(item.summary, 350),
+                "abstract": _clip(item.abstract, 500),
+            }
+        )
+
+    group_rows: list[dict] = []
+    for group, items in groups.items():
+        items_sorted = sorted(items, key=lambda x: (x.get("rank") or 0, x.get("title") or ""))
+        group_rows.append({"group": group, "items": items_sorted})
+    group_rows.sort(key=lambda g: (0 if g.get("group") == "Cross-domain" else 1, str(g.get("group") or "")))
+
+    system = (
+        "You are a friendly librarian sending a Discord notification about today's paper recommendations.\n"
+        "Write in Korean.\n"
+        "Use friendly informal speech (반말). Do NOT use honorifics like 합니다/하세요/드립니다.\n"
+        "Be warm, helpful, and non-robotic.\n"
+        "Output JSON only.\n"
+    )
+
+    user = (
+        "Task: Write a short Discord message summarizing the recommendation results.\n"
+        f"Trigger: {trigger}\n"
+        f"Total items: {len(payload.items or [])}\n\n"
+        "Constraints:\n"
+        "- Keep the whole message within 1700 characters.\n"
+        "- Include every paper below.\n"
+        "- For each paper, write 1–2 short lines that blend one_liner/summary/abstract naturally.\n"
+        "- Group by folder label, and include a compact group header for each group.\n"
+        "- If URL exists, you may include it, but keep it short.\n"
+        "- End with 1 short line telling the user to check the Web UI 'Recs' tab.\n\n"
+        "Data (JSON):\n"
+        f"{json.dumps(group_rows, ensure_ascii=False)}\n"
+    )
+
+    out = llm.generate_json(system=system, user=user, json_schema=_discord_recommender_notify_schema())
+    content = str((out or {}).get("content") or "").strip()
+    if not content:
+        raise RuntimeError("LLM returned empty content.")
+    return content
 
 
 def _append_log(task_id: uuid.UUID, message: str, *, level: str = "info") -> None:
@@ -292,20 +412,35 @@ def run_recommendation_task(task_id: uuid.UUID) -> None:
 
                 url = (settings.discord_notify_webhook_url or settings.discord_webhook_url or "").strip()
                 if url:
-                    intro = (
-                        "사서 알림) 자동 추천 업데이트가 끝났어요."
-                        if trigger == "auto"
-                        else "사서 알림) 새 추천 목록을 정리해뒀어요."
-                    )
-                    send_discord_webhook(
-                        url=url,
-                        content=(
-                            f"{intro}\n"
-                            f"총 {len(payload.items)}편이에요. Web UI의 Recs 탭에서 확인해 주세요."
-                        ),
-                        username=settings.discord_notify_username,
-                        avatar_url=settings.discord_notify_avatar_url,
-                    )
+                    message: str | None = None
+                    try:
+                        message = _build_llm_discord_notification(
+                            llm=decider_llm,
+                            trigger=trigger,
+                            payload=payload,
+                            folders_in=folders_in,
+                        )
+                    except Exception as e:  # noqa: BLE001
+                        _append_log(task_id, f"Discord notify LLM failed: {type(e).__name__}: {e}", level="error")
+                        message = None
+
+                    if not message:
+                        mode = "자동" if trigger == "auto" else "수동"
+                        message = (
+                            f"도서관 사서 알림) {mode} 추천 정리해뒀어.\n"
+                            f"총 {len(payload.items)}개야. Web UI의 Recs 탭에서 확인해줘."
+                        )
+
+                    chunks = _split_chunks(message, chunk_size=1800)
+                    total = len(chunks)
+                    for idx, chunk in enumerate(chunks, start=1):
+                        prefix = f"({idx}/{total}) " if total > 1 else ""
+                        send_discord_webhook(
+                            url=url,
+                            content=prefix + chunk,
+                            username=settings.discord_notify_username,
+                            avatar_url=settings.discord_notify_avatar_url,
+                        )
             except Exception:
                 pass
     except Exception as e:  # noqa: BLE001
@@ -324,8 +459,8 @@ def run_recommendation_task(task_id: uuid.UUID) -> None:
                     send_discord_webhook(
                         url=url,
                         content=(
-                            "사서 알림) 추천 목록을 정리하다가 문제가 생겼어요.\n"
-                            "잠시 후 다시 시도해 주세요.\n"
+                            "도서관 사서 알림) 추천 목록 정리하다가 문제가 생겼어.\n"
+                            "잠깐만 확인하고 다시 한 번만 돌려줘.\n"
                             f"(오류: {type(e).__name__}: {err})"
                         ),
                         username=settings.discord_notify_username,

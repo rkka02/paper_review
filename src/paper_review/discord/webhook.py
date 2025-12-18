@@ -22,6 +22,7 @@ def send_discord_webhook(
     username: str | None = None,
     avatar_url: str | None = None,
     embeds: list[dict[str, Any]] | None = None,
+    thread_id: int | None = None,
     timeout_seconds: float = 20.0,
 ) -> None:
     webhook_url = (url or "").strip()
@@ -38,7 +39,10 @@ def send_discord_webhook(
 
     timeout = httpx.Timeout(connect=10.0, read=timeout_seconds, write=timeout_seconds, pool=10.0)
     with httpx.Client(timeout=timeout) as client:
-        r = client.post(webhook_url, json=body)
+        params: dict[str, str] | None = None
+        if thread_id is not None:
+            params = {"thread_id": str(int(thread_id))}
+        r = client.post(webhook_url, params=params, json=body)
         if r.status_code >= 400:
             detail = ""
             try:
@@ -47,4 +51,3 @@ def send_discord_webhook(
             except Exception:  # noqa: BLE001
                 detail = (r.text or "")[:500]
             raise RuntimeError(f"Discord webhook error ({r.status_code}): {detail}".strip())
-

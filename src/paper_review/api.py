@@ -610,7 +610,7 @@ def list_papers(
         stmt = stmt.where(Paper.folder_id.is_(None))
     if q:
         like = f"%{q}%"
-        stmt = stmt.where((Paper.title.ilike(like)) | (Paper.doi.ilike(like)))
+        stmt = stmt.where((Paper.title.ilike(like)) | (Paper.doi.ilike(like)) | (Paper.memo.ilike(like)))
     papers = db.execute(stmt).scalars().all()
     return [PaperOut.model_validate(p, from_attributes=True) for p in papers]
 
@@ -636,7 +636,7 @@ def list_papers_summary(
         stmt = stmt.where(Paper.folder_id.is_(None))
     if q:
         like = f"%{q}%"
-        stmt = stmt.where((Paper.title.ilike(like)) | (Paper.doi.ilike(like)))
+        stmt = stmt.where((Paper.title.ilike(like)) | (Paper.doi.ilike(like)) | (Paper.memo.ilike(like)))
 
     papers = db.execute(stmt).scalars().all()
     out: list[PaperSummaryOut] = []

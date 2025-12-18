@@ -194,7 +194,7 @@ def lookup_paper_for_message(db: Session, text: str) -> PaperLookupResult:
             db.execute(
                 select(Paper)
                 .options(selectinload(Paper.metadata_row), selectinload(Paper.review))
-                .where((Paper.title.ilike(like)) | (Paper.doi.ilike(like)))
+                .where((Paper.title.ilike(like)) | (Paper.doi.ilike(like)) | (Paper.memo.ilike(like)))
                 .order_by(desc(Paper.updated_at))
                 .limit(5)
             )
@@ -216,4 +216,3 @@ def latest_papers(db: Session, limit: int = 5) -> list[Paper]:
         .scalars()
         .all()
     )
-

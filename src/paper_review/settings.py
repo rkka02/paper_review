@@ -98,6 +98,13 @@ class Settings(BaseSettings):
     discord_notify_username: str = Field(default="paper_review", alias="DISCORD_NOTIFY_USERNAME")
     discord_notify_avatar_url: str | None = Field(default=None, alias="DISCORD_NOTIFY_AVATAR_URL")
 
+    discord_debate_enabled: bool = Field(default=True, alias="DISCORD_DEBATE_ENABLED")
+    discord_debate_poll_seconds: int = Field(default=15, alias="DISCORD_DEBATE_POLL_SECONDS")
+    discord_debate_min_interval_seconds: int = Field(default=300, alias="DISCORD_DEBATE_MIN_INTERVAL_SECONDS")
+    discord_debate_max_interval_seconds: int = Field(default=600, alias="DISCORD_DEBATE_MAX_INTERVAL_SECONDS")
+    discord_debate_max_turns_per_thread: int = Field(default=200, alias="DISCORD_DEBATE_MAX_TURNS_PER_THREAD")
+    discord_debate_semantic_scholar: bool = Field(default=False, alias="DISCORD_DEBATE_SEMANTIC_SCHOLAR")
+
     @property
     def web_auth_enabled(self) -> bool:
         return bool(self.web_username and self.web_password)

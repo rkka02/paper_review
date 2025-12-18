@@ -635,7 +635,7 @@ function renderOverview(detail, outputKey) {
         if (linked.has(String(id))) continue;
         const title = paperLabel(p);
         const folder = folderName(p.folder_id) || "";
-        const hay = `${title} ${p.doi || ""} ${p.id || ""} ${folder}`.toLowerCase();
+        const hay = `${title} ${p.doi || ""} ${p.id || ""} ${folder} ${p.memo || ""}`.toLowerCase();
         if (!hay.includes(q)) continue;
         matches.push(p);
       }
@@ -2596,7 +2596,7 @@ function applyPapersFilter() {
         const p = item.paper || {};
         const title = normalizeTitle(item);
         const folder = folderName(p.folder_id) || "";
-        const hay = `${title} ${p.doi || ""} ${p.drive_file_id || ""} ${p.id || ""} ${folder}`.toLowerCase();
+        const hay = `${title} ${p.doi || ""} ${p.drive_file_id || ""} ${p.id || ""} ${folder} ${p.memo || ""}`.toLowerCase();
         return hay.includes(q);
       });
 

@@ -170,6 +170,53 @@ def apply_migrations(engine: Engine) -> None:
         "create index if not exists recommendation_tasks_status_idx on recommendation_tasks(status);",
         "create index if not exists recommendation_tasks_trigger_idx on recommendation_tasks(trigger);",
         "create index if not exists recommendation_tasks_created_at_idx on recommendation_tasks(created_at);",
+        """
+        create table if not exists discord_debate_threads (
+          id uuid primary key,
+          discord_thread_id bigint not null,
+          discord_channel_id bigint not null,
+          discord_guild_id bigint,
+          created_by_user_id bigint,
+          topic text not null,
+          is_active boolean not null default false,
+          session_started_at timestamptz not null default now(),
+          persona_a_key text not null default 'hikari',
+          persona_b_key text not null default 'rei',
+          moderator_key text not null default 'tsugumi',
+          next_duo_speaker_key text not null default 'hikari',
+          next_speaker_key text not null default 'hikari',
+          duo_turns_since_moderation int not null default 0,
+          turn_count int not null default 0,
+          max_turns int not null default 200,
+          last_turn_at timestamptz,
+          next_turn_at timestamptz,
+          created_at timestamptz not null default now(),
+          updated_at timestamptz not null default now()
+        );
+        """,
+        "alter table discord_debate_threads add column if not exists session_started_at timestamptz not null default now();",
+        "create unique index if not exists discord_debate_threads_thread_uniq on discord_debate_threads(discord_thread_id);",
+        "create index if not exists discord_debate_threads_active_idx on discord_debate_threads(is_active);",
+        "create index if not exists discord_debate_threads_next_turn_idx on discord_debate_threads(next_turn_at);",
+        "create index if not exists discord_debate_threads_guild_idx on discord_debate_threads(discord_guild_id);",
+        "create index if not exists discord_debate_threads_channel_idx on discord_debate_threads(discord_channel_id);",
+        "create index if not exists discord_debate_threads_created_by_idx on discord_debate_threads(created_by_user_id);",
+        """
+        create table if not exists discord_debate_turns (
+          id uuid primary key,
+          thread_id uuid not null references discord_debate_threads(id) on delete cascade,
+          speaker_key text not null,
+          source text not null default 'agent',
+          content text not null,
+          discord_message_id bigint,
+          meta jsonb,
+          created_at timestamptz not null default now()
+        );
+        """,
+        "create index if not exists discord_debate_turns_thread_idx on discord_debate_turns(thread_id);",
+        "create index if not exists discord_debate_turns_speaker_idx on discord_debate_turns(speaker_key);",
+        "create index if not exists discord_debate_turns_source_idx on discord_debate_turns(source);",
+        "create index if not exists discord_debate_turns_created_at_idx on discord_debate_turns(created_at);",
     ]
 
     with engine.begin() as conn:

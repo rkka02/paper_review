@@ -5,6 +5,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     Float,
@@ -326,3 +327,66 @@ class RecommendationTask(Base):
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class DiscordDebateThread(Base):
+    __tablename__ = "discord_debate_threads"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    discord_thread_id: Mapped[int] = mapped_column(BigInteger, nullable=False, unique=True, index=True)
+    discord_channel_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    discord_guild_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+
+    topic: Mapped[str] = mapped_column(Text, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    session_started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    persona_a_key: Mapped[str] = mapped_column(String(32), nullable=False, default="hikari")
+    persona_b_key: Mapped[str] = mapped_column(String(32), nullable=False, default="rei")
+    moderator_key: Mapped[str] = mapped_column(String(32), nullable=False, default="tsugumi")
+
+    next_duo_speaker_key: Mapped[str] = mapped_column(String(32), nullable=False, default="hikari")
+    next_speaker_key: Mapped[str] = mapped_column(String(32), nullable=False, default="hikari")
+    duo_turns_since_moderation: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    turn_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_turns: Mapped[int] = mapped_column(Integer, nullable=False, default=200)
+
+    last_turn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_turn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    turns: Mapped[list["DiscordDebateTurn"]] = relationship(
+        back_populates="thread", cascade="all, delete-orphan"
+    )
+
+
+class DiscordDebateTurn(Base):
+    __tablename__ = "discord_debate_turns"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    thread_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("discord_debate_threads.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    speaker_key: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="agent", index=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    discord_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    meta: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    thread: Mapped[DiscordDebateThread] = relationship(back_populates="turns")
