@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import random
 import re
+import textwrap
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -129,9 +130,9 @@ _UUID_RE = re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89a
 def _compact_chat_reply(
     text: str,
     *,
-    max_lines: int = 10,
-    max_total_chars: int = 900,
-    max_line_chars: int = 220,
+    max_lines: int = 14,
+    max_total_chars: int = 1800,
+    max_line_chars: int = 160,
 ) -> str:
     raw = (text or "").strip()
     if not raw:
@@ -154,30 +155,32 @@ def _compact_chat_reply(
     if not cleaned:
         return ""
 
-    truncated = False
-    if len(cleaned) > max_lines:
-        cleaned = cleaned[:max_lines]
-        truncated = True
-
-    out_lines: list[str] = []
+    wrapped: list[str] = []
+    width = max(40, int(max_line_chars))
     for s in cleaned:
-        if len(s) > max_line_chars:
-            s = s[:max_line_chars].rstrip()
-            if not s.endswith("…"):
-                s += "…"
+        if len(s) <= width:
+            wrapped.append(s)
+            continue
+        chunks = textwrap.wrap(s, width=width, break_long_words=True, break_on_hyphens=False)
+        wrapped.extend([c.strip() for c in chunks if c.strip()] or [s])
+
+    truncated = False
+    out_lines: list[str] = []
+    total = 0
+    for s in wrapped:
+        if len(out_lines) >= max_lines:
             truncated = True
+            break
+        addition = len(s) + (1 if out_lines else 0)  # + newline
+        if total + addition > max_total_chars:
+            truncated = True
+            break
         out_lines.append(s)
+        total += addition
 
     out = "\n".join(out_lines).strip()
-    if len(out) > max_total_chars:
-        out = out[:max_total_chars].rstrip()
-        if not out.endswith("…"):
-            out += "…"
-        truncated = True
-
     if truncated and out and not out.endswith("…"):
         out += "…"
-
     return out
 
 
