@@ -314,7 +314,7 @@ def _relevant_papers_text(db: Session, *, topic: str, history: str, limit: int =
     return "\n\n---\n\n".join(blocks).strip()
 
 
-def _semantic_scholar_search_text(query: str, limit: int = 3) -> tuple[str, list[str]]:
+def _semantic_scholar_search_text(query: str, limit: int = 3) -> tuple[str, list[dict[str, str]]]:
     q = (query or "").strip()
     if not q:
         return "", []
@@ -349,7 +349,7 @@ def _semantic_scholar_search_text(query: str, limit: int = 3) -> tuple[str, list
         rows = [*rows[:top_k], *sampled]
 
     lines: list[str] = []
-    urls: list[str] = []
+    items: list[dict[str, str]] = []
     for r in rows[: max(1, int(limit))]:
         title = (r.get("title") or "").strip()
         year = r.get("year")
@@ -366,10 +366,10 @@ def _semantic_scholar_search_text(query: str, limit: int = 3) -> tuple[str, list
             tail_parts.append(f"doi:{doi}")
         if url:
             tail_parts.append(url)
-            urls.append(url)
+            items.append({"title": head, "url": url})
         tail = " | ".join(tail_parts)
         lines.append(f"- {head}" + (f" ({tail})" if tail else ""))
-    return "\n".join(lines).strip(), urls
+    return "\n".join(lines).strip(), items
 
 
 _URL_ANY_RE = re.compile(r"https?://[^\s<>]+")
@@ -385,6 +385,59 @@ def _wrap_urls_no_embed(text: str) -> str:
         return f"<{m.group(0)}>"
 
     return _URL_RE.sub(repl, text or "")
+
+
+def _safe_paper_title(title: str, *, max_chars: int = 140) -> str:
+    t = (title or "").strip()
+    t = re.sub(r"\s+", " ", t).strip()
+    if not t:
+        return ""
+    if len(t) > max_chars:
+        t = t[:max_chars].rstrip()
+        if not t.endswith("…"):
+            t += "…"
+    return t
+
+
+def _attach_titles_to_cited_urls(reply: str, items: list[dict[str, str]], *, max_items: int = 2) -> str:
+    text = (reply or "").strip()
+    if not text or not items:
+        return text
+
+    hits: list[tuple[str, str]] = []
+    for it in items:
+        url = (it.get("url") or "").strip()
+        if not url:
+            continue
+        if url not in text and f"<{url}>" not in text:
+            continue
+        title = _safe_paper_title(it.get("title") or "")
+        hits.append((url, title))
+
+    if not hits:
+        return text
+
+    seen: set[str] = set()
+    uniq_hits: list[tuple[str, str]] = []
+    for url, title in hits:
+        if url in seen:
+            continue
+        uniq_hits.append((url, title))
+        seen.add(url)
+        if len(uniq_hits) >= max(1, int(max_items)):
+            break
+
+    lower = text.lower()
+    for url, title in uniq_hits:
+        if not title:
+            continue
+        if title.lower() in lower:
+            continue
+        target = f"<{url}>" if f"<{url}>" in text else url
+        text = text.replace(target, f"{title} {target}".strip(), 1)
+        lower = text.lower()
+
+    return text
 
 
 def _normalize_for_similarity(text: str) -> str:
@@ -534,7 +587,8 @@ def _build_user_prompt(
         parts.append(
             "Links:\n"
             "- Do NOT include links by default (Discord link previews are annoying).\n"
-            "- Only when you cite a DIFFERENT paper than the one already in the topic: include at most 1 URL, wrapped like <https://...> to suppress preview.\n"
+            "- Only when you cite a DIFFERENT paper than the one already in the topic: include at most 1 URL.\n"
+            "- When you include a URL, ALWAYS include the cited paper title next to it (URL can be 404). Wrap URL like <https://...> to suppress preview.\n"
         )
     if persona_key in {"hikari", "rei"}:
         parts.append(
@@ -805,7 +859,7 @@ def run_due_debate_turn_with_db(
         db_context = _relevant_papers_text(db, topic=thread.topic, history=history, limit=3)
         recent_s2_queries = _recent_semantic_scholar_queries_text(turns, limit=6)
         ss_snips = ""
-        ss_urls: list[str] = []
+        ss_items: list[dict[str, str]] = []
         used_s2_query = ""
         repetition_retry_count = 0
 
@@ -832,7 +886,7 @@ def run_due_debate_turn_with_db(
         reply = str((plan_payload or {}).get("reply") or "").strip()
 
         if ss_query and settings.discord_debate_semantic_scholar:
-            ss_snips, ss_urls = _semantic_scholar_search_text(ss_query, limit=6)
+            ss_snips, ss_items = _semantic_scholar_search_text(ss_query, limit=6)
             used_s2_query = ss_query
             tool_user = _build_user_prompt(
                 topic=thread.topic,
@@ -886,7 +940,7 @@ def run_due_debate_turn_with_db(
                 )
                 forced_query = str((forced_payload or {}).get("semantic_scholar_query") or "").strip()
                 if forced_query:
-                    ss_snips, ss_urls = _semantic_scholar_search_text(forced_query, limit=8)
+                    ss_snips, ss_items = _semantic_scholar_search_text(forced_query, limit=8)
                     used_s2_query = forced_query
                     forced_tool_user = _build_user_prompt(
                         topic=thread.topic,
@@ -920,6 +974,7 @@ def run_due_debate_turn_with_db(
             "semantic_scholar_query": used_s2_query or None,
             "repetition_retry_count": int(repetition_retry_count),
         }
+        reply = _attach_titles_to_cited_urls(reply, ss_items)
         reply = _compact_chat_reply(reply) or reply
         reply = _wrap_urls_no_embed(reply)
     except Exception as e:  # noqa: BLE001
