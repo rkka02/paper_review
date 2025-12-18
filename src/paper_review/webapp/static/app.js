@@ -1866,7 +1866,8 @@ function ensureGraphState() {
     for (const n of st.nodes) {
       const px = n.x * st.scale + st.panX;
       const py = n.y * st.scale + st.panY;
-      const r = Math.max(6, Math.min(26, n.r * st.scale)) + hitSlop;
+      const z = Math.sqrt(st.scale);
+      const r = clamp((n.r + 2) * z, 6, 36) + hitSlop;
       const dx = px - sx;
       const dy = py - sy;
       const d2 = dx * dx + dy * dy;
@@ -2160,7 +2161,7 @@ function graphSetData(graph) {
     if (!id) continue;
     const old = prev.get(id) || null;
     const d = degree.get(id) || 0;
-    const baseR = 6 + Math.sqrt(d) * 2.2;
+    const baseR = clamp(6 + Math.min(20, d) * 1.2, 6, 30);
     const hue = hashHue(n.folder_id || id);
     nodes.push({
       id,
@@ -2172,6 +2173,7 @@ function graphSetData(graph) {
       vx: old ? old.vx : 0,
       vy: old ? old.vy : 0,
       r: baseR,
+      degree: d,
       hue,
     });
   }
@@ -2291,7 +2293,8 @@ function graphRender() {
   for (const n of st.nodes) {
     const x = n.x * st.scale + st.panX;
     const y = n.y * st.scale + st.panY;
-    const r = Math.max(5, Math.min(22, n.r * st.scale));
+    const z = Math.sqrt(st.scale);
+    const r = clamp((n.r + 2) * z, 4, 32);
     const isHover = st.hoverId === n.id;
     const isHi = st.highlightId === n.id;
 
