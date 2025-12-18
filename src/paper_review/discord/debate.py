@@ -8,6 +8,7 @@ import textwrap
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 
 from sqlalchemy import desc, or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -98,8 +99,15 @@ def _debate_turn_schema() -> dict:
         "name": "discord_debate_turn",
         "schema": {
             "type": "object",
-            "properties": {"reply": {"type": "string"}},
-            "required": ["reply"],
+            "properties": {
+                "reply": {"type": "string"},
+                "citations": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": 2,
+                },
+            },
+            "required": ["reply", "citations"],
             "additionalProperties": False,
         },
         "strict": True,
@@ -113,9 +121,8 @@ def _debate_turn_plan_schema() -> dict:
             "type": "object",
             "properties": {
                 "semantic_scholar_query": {"type": "string"},
-                "reply": {"type": "string"},
             },
-            "required": ["semantic_scholar_query", "reply"],
+            "required": ["semantic_scholar_query"],
             "additionalProperties": False,
         },
         "strict": True,
@@ -351,6 +358,7 @@ def _semantic_scholar_search_text(query: str, limit: int = 3) -> tuple[str, list
     lines: list[str] = []
     items: list[dict[str, str]] = []
     for r in rows[: max(1, int(limit))]:
+        paper_id = (r.get("paper_id") or "").strip()
         title = (r.get("title") or "").strip()
         year = r.get("year")
         venue = (r.get("venue") or "").strip()
@@ -366,14 +374,24 @@ def _semantic_scholar_search_text(query: str, limit: int = 3) -> tuple[str, list
             tail_parts.append(f"doi:{doi}")
         if url:
             tail_parts.append(url)
-            items.append({"title": head, "url": url})
+            item: dict[str, str] = {"title": head, "url": url}
+            if paper_id:
+                item["paper_id"] = paper_id
+            if doi:
+                item["doi"] = doi
+            items.append(item)
         tail = " | ".join(tail_parts)
-        lines.append(f"- {head}" + (f" ({tail})" if tail else ""))
+        pid_part = f" paper_id={paper_id}" if paper_id else ""
+        lines.append(f"- {head}{pid_part}" + (f" ({tail})" if tail else ""))
     return "\n".join(lines).strip(), items
 
 
 _URL_ANY_RE = re.compile(r"https?://[^\s<>]+")
 _URL_RE = re.compile(r"(?<!<)https?://[^\s<>]+(?!>)")
+
+
+_DOI_RE = re.compile(r"(10\.\d{4,9}/[-._;()/:A-Z0-9]+)", re.IGNORECASE)
+_ARXIV_ABS_RE = re.compile(r"arxiv\.org/abs/([^\s<>?#]+)", re.IGNORECASE)
 
 
 def _wrap_urls_no_embed(text: str) -> str:
@@ -387,10 +405,120 @@ def _wrap_urls_no_embed(text: str) -> str:
     return _URL_RE.sub(repl, text or "")
 
 
+def _remove_urls(text: str) -> str:
+    """
+    Strictly remove any URLs from LLM reply (we'll re-attach verified citations ourselves).
+    """
+    s = (text or "").strip()
+    if not s:
+        return ""
+    s = _URL_ANY_RE.sub("", s)
+    s = re.sub(r"<\s*>", "", s)
+    s = re.sub(r"\(\s*\)", "", s)
+    s = re.sub(r"\s{2,}", " ", s)
+    s = re.sub(r"\n[ \t]+\n", "\n\n", s)
+    return s.strip()
+
+
+def _extract_topic_identifiers(topic: str) -> tuple[str | None, str | None, set[str]]:
+    t = (topic or "").strip()
+    doi = None
+    arxiv = None
+    urls: set[str] = set()
+
+    m = _DOI_RE.search(t)
+    if m:
+        doi = (m.group(1) or "").strip().lower() or None
+
+    m = _ARXIV_ABS_RE.search(t)
+    if m:
+        arxiv = (m.group(1) or "").strip().lower() or None
+
+    for um in _URL_ANY_RE.finditer(t):
+        u = (um.group(0) or "").strip()
+        if u:
+            urls.add(u)
+    return doi, arxiv, urls
+
+
+def _build_verified_citations_line(
+    topic: str,
+    citations: list[str],
+    ss_items: list[dict[str, str]],
+    *,
+    max_items: int = 2,
+) -> tuple[str, list[str]]:
+    wanted = [str(x).strip() for x in (citations or []) if str(x).strip()]
+    if not wanted or not ss_items:
+        return "", []
+
+    doi0, arxiv0, urls0 = _extract_topic_identifiers(topic)
+
+    by_pid: dict[str, dict[str, str]] = {}
+    for it in ss_items:
+        pid = (it.get("paper_id") or "").strip()
+        if not pid:
+            continue
+        by_pid[pid] = it
+
+    chosen: list[dict[str, str]] = []
+    chosen_pids: list[str] = []
+    seen: set[str] = set()
+    for pid in wanted:
+        if pid in seen:
+            continue
+        it = by_pid.get(pid)
+        if not it:
+            continue
+        seen.add(pid)
+
+        doi = (it.get("doi") or "").strip().lower()
+        url = (it.get("url") or "").strip()
+        if doi0 and doi and doi == doi0:
+            continue
+        if urls0 and url and url in urls0:
+            continue
+        if arxiv0 and url and arxiv0 in url.lower():
+            continue
+
+        chosen.append(it)
+        chosen_pids.append(pid)
+        if len(chosen) >= max(1, int(max_items)):
+            break
+
+    if not chosen:
+        return "", []
+
+    parts: list[str] = []
+    for it in chosen:
+        title = _safe_paper_title(it.get("title") or "")
+        pid = (it.get("paper_id") or "").strip()
+        doi = (it.get("doi") or "").strip()
+
+        # Use a canonical S2 page URL (more stable than arbitrary URLs; avoids many 404s).
+        url = f"https://www.semanticscholar.org/paper/{pid}" if pid else ""
+        if not url and title:
+            url = "https://www.semanticscholar.org/search?q=" + quote(title)
+        if not title:
+            title = "(untitled)"
+        tail = f" (doi:{doi})" if doi else ""
+        if url:
+            parts.append(f"{title}{tail} <{url}>")
+        else:
+            parts.append(f"{title}{tail}")
+
+    if not parts:
+        return "", []
+    return "(참고: " + "; ".join(parts) + ")", chosen_pids
+
+
 def _safe_paper_title(title: str, *, max_chars: int = 140) -> str:
     t = (title or "").strip()
     t = re.sub(r"\s+", " ", t).strip()
     if not t:
+        return ""
+    # Guard against common hallucination artifacts like template placeholders.
+    if t in {"TBD", "N/A", "Unknown", "(untitled)"}:
         return ""
     if len(t) > max_chars:
         t = t[:max_chars].rstrip()
@@ -577,18 +705,25 @@ def _build_user_prompt(
                 "- If you need external paper facts/related work: set semantic_scholar_query to a short keyword query (<= 120 chars).\n"
                 "- Be exploratory: use concept keywords, avoid just copying the exact paper title/DOI, and don't repeat previous queries.\n"
                 "- Otherwise set semantic_scholar_query to \"\".\n"
-                "- If semantic_scholar_query is non-empty, set reply to \"\" (we will call you again with tool results).\n"
+                "- Output ONLY semantic_scholar_query as JSON (no reply in this step).\n"
             )
             if semantic_scholar_recent_queries:
                 parts.append("Recent Semantic Scholar queries (do NOT repeat):\n" + semantic_scholar_recent_queries)
         else:
             parts.append('Semantic Scholar tool is disabled: set semantic_scholar_query to "".\n')
+    else:
+        parts.append(
+            "Output:\n"
+            "- Always output JSON with fields: reply (string) and citations (list of Semantic Scholar paper_id strings, max 2).\n"
+            "- If you didn't use Semantic Scholar results: citations must be [].\n"
+        )
     if semantic_scholar_snippets:
         parts.append(
             "Links:\n"
             "- Do NOT include links by default (Discord link previews are annoying).\n"
-            "- Only when you cite a DIFFERENT paper than the one already in the topic: include at most 1 URL.\n"
-            "- When you include a URL, ALWAYS include the cited paper title next to it (URL can be 404). Wrap URL like <https://...> to suppress preview.\n"
+            "- Do NOT paste any URL in your reply.\n"
+            "- If you use a Semantic Scholar result as evidence, add its paper_id to the `citations` list (max 2).\n"
+            "- We'll render \"Title <URL>\" ourselves (URL can be 404), and wrap <...> to suppress previews.\n"
         )
     if persona_key in {"hikari", "rei"}:
         parts.append(
@@ -883,7 +1018,8 @@ def run_due_debate_turn_with_db(
 
         plan_payload = llm.generate_json(system=system, user=plan_user, json_schema=_debate_turn_plan_schema())
         ss_query = str((plan_payload or {}).get("semantic_scholar_query") or "").strip()
-        reply = str((plan_payload or {}).get("reply") or "").strip()
+        reply = ""
+        citations: list[str] = []
 
         if ss_query and settings.discord_debate_semantic_scholar:
             ss_snips, ss_items = _semantic_scholar_search_text(ss_query, limit=6)
@@ -900,6 +1036,9 @@ def run_due_debate_turn_with_db(
             )
             payload = llm.generate_json(system=system, user=tool_user, json_schema=_debate_turn_schema())
             reply = str((payload or {}).get("reply") or "").strip()
+            raw_citations = (payload or {}).get("citations")
+            if isinstance(raw_citations, list):
+                citations = [str(x).strip() for x in raw_citations if str(x).strip()]
 
         if not reply:
             fallback_user = _build_user_prompt(
@@ -914,6 +1053,9 @@ def run_due_debate_turn_with_db(
             )
             payload = llm.generate_json(system=system, user=fallback_user, json_schema=_debate_turn_schema())
             reply = str((payload or {}).get("reply") or "").strip()
+            raw_citations = (payload or {}).get("citations")
+            if isinstance(raw_citations, list):
+                citations = [str(x).strip() for x in raw_citations if str(x).strip()]
 
         if not reply:
             raise ValueError("Empty LLM output.")
@@ -933,7 +1075,6 @@ def run_due_debate_turn_with_db(
                     plan_user
                     + "\n\nHard rule: Your draft reply was rejected because it repeated the previous point.\n"
                     + "- You MUST set semantic_scholar_query to a NEW exploratory query.\n"
-                    + "- Set reply to \"\".\n"
                 )
                 forced_payload = llm.generate_json(
                     system=system, user=forced_plan_user, json_schema=_debate_turn_plan_schema()
@@ -960,6 +1101,9 @@ def run_due_debate_turn_with_db(
                         system=system, user=forced_tool_user, json_schema=_debate_turn_schema()
                     )
                     reply = str((forced_turn or {}).get("reply") or "").strip()
+                    raw_citations = (forced_turn or {}).get("citations")
+                    if isinstance(raw_citations, list):
+                        citations = [str(x).strip() for x in raw_citations if str(x).strip()]
 
         if not reply:
             raise ValueError("Empty LLM output.")
@@ -973,8 +1117,19 @@ def run_due_debate_turn_with_db(
         turn_meta = {
             "semantic_scholar_query": used_s2_query or None,
             "repetition_retry_count": int(repetition_retry_count),
+            "citations_requested": citations,
         }
-        reply = _attach_titles_to_cited_urls(reply, ss_items)
+        reply = _remove_urls(reply)
+        citations_line, citations_verified = _build_verified_citations_line(thread.topic, citations, ss_items)
+        if citations_verified:
+            turn_meta["citations_verified"] = citations_verified
+        if not reply and citations_line:
+            reply = citations_line
+            citations_line = ""
+        if citations_line:
+            reply = (reply.rstrip() + "\n\n" + citations_line).strip()
+        if not reply:
+            reply = "이번 턴은 실질적으로 새로 추가할 정보가 없어서 패스할게. 질문을 조금만 더 구체적으로 던져줘."
         reply = _compact_chat_reply(reply) or reply
         reply = _wrap_urls_no_embed(reply)
     except Exception as e:  # noqa: BLE001
