@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import random
 import re
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -103,6 +104,103 @@ def _debate_turn_schema() -> dict:
     }
 
 
+def _debate_turn_plan_schema() -> dict:
+    return {
+        "name": "discord_debate_turn_plan",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "semantic_scholar_query": {"type": "string"},
+                "reply": {"type": "string"},
+            },
+            "required": ["semantic_scholar_query", "reply"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    }
+
+
+_CODE_FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
+_HEADING_PREFIX_RE = re.compile(r"^\s*#{1,6}\s+")
+_BULLET_PREFIX_RE = re.compile(r"^\s*(?:[-*•]+|\d+[.)]|[a-zA-Z][.)])\s+")
+_UUID_RE = re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\b")
+
+
+def _compact_chat_reply(
+    text: str,
+    *,
+    max_lines: int = 10,
+    max_total_chars: int = 900,
+    max_line_chars: int = 220,
+) -> str:
+    raw = (text or "").strip()
+    if not raw:
+        return ""
+
+    raw = raw.replace("\r\n", "\n").replace("\r", "\n")
+    raw = _CODE_FENCE_RE.sub("", raw).strip()
+    raw = re.sub(r"\n{3,}", "\n\n", raw).strip()
+
+    cleaned: list[str] = []
+    for line in raw.split("\n"):
+        s = (line or "").strip()
+        if not s:
+            continue
+        s = _HEADING_PREFIX_RE.sub("", s).strip()
+        s = _BULLET_PREFIX_RE.sub("", s).strip()
+        if s:
+            cleaned.append(s)
+
+    if not cleaned:
+        return ""
+
+    truncated = False
+    if len(cleaned) > max_lines:
+        cleaned = cleaned[:max_lines]
+        truncated = True
+
+    out_lines: list[str] = []
+    for s in cleaned:
+        if len(s) > max_line_chars:
+            s = s[:max_line_chars].rstrip()
+            if not s.endswith("…"):
+                s += "…"
+            truncated = True
+        out_lines.append(s)
+
+    out = "\n".join(out_lines).strip()
+    if len(out) > max_total_chars:
+        out = out[:max_total_chars].rstrip()
+        if not out.endswith("…"):
+            out += "…"
+        truncated = True
+
+    if truncated and out and not out.endswith("…"):
+        out += "…"
+
+    return out
+
+
+def _extract_paper_ids(text: str, *, limit: int = 5) -> list[uuid.UUID]:
+    raw = (text or "").strip()
+    if not raw:
+        return []
+    out: list[uuid.UUID] = []
+    seen: set[uuid.UUID] = set()
+    for m in _UUID_RE.finditer(raw):
+        try:
+            pid = uuid.UUID(m.group(0))
+        except Exception:  # noqa: BLE001
+            continue
+        if pid in seen:
+            continue
+        out.append(pid)
+        seen.add(pid)
+        if len(out) >= max(1, int(limit)):
+            break
+    return out
+
+
 def _load_recent_turns(db: Session, thread: DiscordDebateThread, limit: int = 18) -> list[DiscordDebateTurn]:
     started_at = thread.session_started_at
     return (
@@ -129,16 +227,42 @@ def _turns_text(turns: list[DiscordDebateTurn]) -> str:
     return "\n".join(lines).strip()
 
 
-def _relevant_papers_text(db: Session, topic: str, limit: int = 3) -> str:
-    q = (topic or "").strip()
-    if not q:
-        return ""
-    if len(q) > 120:
-        q = q[:120]
-    like = f"%{q}%"
+def _relevant_papers_text(db: Session, *, topic: str, history: str, limit: int = 3) -> str:
+    limit = max(1, int(limit))
 
-    papers = (
-        db.execute(
+    ids: list[uuid.UUID] = []
+    ids.extend(_extract_paper_ids(topic, limit=limit))
+    ids.extend([x for x in _extract_paper_ids(history, limit=limit) if x not in set(ids)])
+
+    blocks: list[str] = []
+    exclude_ids: list[uuid.UUID] = []
+
+    if ids:
+        rows = (
+            db.execute(
+                select(Paper)
+                .options(selectinload(Paper.metadata_row), selectinload(Paper.review))
+                .where(Paper.id.in_(ids))
+            )
+            .scalars()
+            .all()
+        )
+        by_id = {p.id: p for p in rows}
+        for pid in ids:
+            p = by_id.get(pid)
+            if not p:
+                continue
+            blocks.append(paper_context_text(db, p))
+            exclude_ids.append(p.id)
+            if len(blocks) >= limit:
+                return "\n\n---\n\n".join(blocks).strip()
+
+    q = (topic or "").strip()
+    if q:
+        if len(q) > 120:
+            q = q[:120]
+        like = f"%{q}%"
+        stmt = (
             select(Paper)
             .options(selectinload(Paper.metadata_row), selectinload(Paper.review))
             .where(
@@ -148,34 +272,36 @@ def _relevant_papers_text(db: Session, topic: str, limit: int = 3) -> str:
                 | (Paper.abstract.ilike(like))
             )
             .order_by(desc(Paper.updated_at))
-            .limit(max(1, int(limit)))
+            .limit(limit)
         )
-        .scalars()
-        .all()
-    )
-    if not papers:
-        return ""
+        if exclude_ids:
+            stmt = stmt.where(~Paper.id.in_(exclude_ids))
 
-    blocks: list[str] = []
-    for p in papers:
-        blocks.append(paper_context_text(db, p))
+        papers = db.execute(stmt).scalars().all()
+        for p in papers:
+            blocks.append(paper_context_text(db, p))
+            if len(blocks) >= limit:
+                break
+
     return "\n\n---\n\n".join(blocks).strip()
 
 
-def _semantic_scholar_text(topic: str, limit: int = 3) -> str:
-    if not settings.discord_debate_semantic_scholar:
-        return ""
-    q = (topic or "").strip()
+def _semantic_scholar_search_text(query: str, limit: int = 3) -> tuple[str, list[str]]:
+    q = (query or "").strip()
     if not q:
-        return ""
+        return "", []
     try:
         rows = semantic_scholar_search(q, limit=max(1, int(limit)), offset=0)
-    except Exception:
-        return ""
+    except Exception as e:  # noqa: BLE001
+        detail = f"{type(e).__name__}: {e}"
+        if len(detail) > 260:
+            detail = detail[:260].rstrip() + "..."
+        return f"(Semantic Scholar error: {detail})", []
     if not rows:
-        return ""
+        return "", []
 
     lines: list[str] = []
+    urls: list[str] = []
     for r in rows[: max(1, int(limit))]:
         title = (r.get("title") or "").strip()
         year = r.get("year")
@@ -192,9 +318,35 @@ def _semantic_scholar_text(topic: str, limit: int = 3) -> str:
             tail_parts.append(f"doi:{doi}")
         if url:
             tail_parts.append(url)
+            urls.append(url)
         tail = " | ".join(tail_parts)
         lines.append(f"- {head}" + (f" ({tail})" if tail else ""))
-    return "\n".join(lines).strip()
+    return "\n".join(lines).strip(), urls
+
+
+def _append_semantic_scholar_sources(reply: str, urls: list[str], *, max_urls: int = 2) -> str:
+    text = (reply or "").strip()
+    if not text:
+        return text
+    if not urls:
+        return text
+    if "http://" in text or "https://" in text:
+        return text
+
+    uniq: list[str] = []
+    seen: set[str] = set()
+    for u in urls:
+        u = (u or "").strip()
+        if not u or u in seen:
+            continue
+        uniq.append(u)
+        seen.add(u)
+        if len(uniq) >= max(1, int(max_urls)):
+            break
+
+    if not uniq:
+        return text
+    return text + "\n" + ("참고(S2): " + " ".join(uniq))
 
 
 def _build_system_prompt(*, persona: DiscordPersona, role: str) -> str:
@@ -204,7 +356,7 @@ def _build_system_prompt(*, persona: DiscordPersona, role: str) -> str:
         "한국어로 답해.",
         "기본 말투는 '친근한 반말'로 해. '합니다/하세요/드립니다' 같은 존댓말은 쓰지 마.",
         "문장 끝을 자연스러운 반말 종결(~해/~했어/~야/~지)로 마무리해.",
-        "아주 짧게 써. 최대 2~3줄, 길게 설명하지 마.",
+        "너무 길게 말하지 말고, '중간 정도' 길이로 써(대략 6~10줄 정도).",
         "실제 사람이 채팅하는 것처럼 자연스럽게 써(목록/소제목/장문 금지).",
         "Hikari and Rei are rivals but also friends. Keep the vibe competitive but friendly (no insults).",
     ]
@@ -224,6 +376,8 @@ def _build_user_prompt(
     history: str,
     db_context: str,
     semantic_scholar_snippets: str,
+    semantic_scholar_tool_available: bool,
+    allow_semantic_scholar_query: bool,
 ) -> str:
     parts: list[str] = []
     parts.append(f"Topic:\n{topic.strip()}\n")
@@ -232,12 +386,32 @@ def _build_user_prompt(
         "- Stay on-topic and build on the ongoing debate.\n"
         "- Ground your claims (use DB context / Semantic Scholar snippets when relevant).\n"
         "- Avoid hallucinating missing fields.\n"
-        "- Keep your reply to 2–3 short lines.\n"
+        "- Keep your reply medium-length (~6–10 short lines).\n"
     )
+    parts.append(
+        "Tools:\n"
+        "- DB: available (papers).\n"
+        f"- Semantic Scholar search: {'available' if semantic_scholar_tool_available else 'disabled'}.\n"
+    )
+    if allow_semantic_scholar_query:
+        if semantic_scholar_tool_available:
+            parts.append(
+                "Semantic Scholar tool call (only when topic is paper-related):\n"
+                "- If you need external paper facts/related work: set semantic_scholar_query to a short keyword query (<= 120 chars).\n"
+                "- Otherwise set semantic_scholar_query to \"\".\n"
+                "- If semantic_scholar_query is non-empty, set reply to \"\" (we will call you again with tool results).\n"
+            )
+        else:
+            parts.append('Semantic Scholar tool is disabled: set semantic_scholar_query to "".\n')
+    elif semantic_scholar_snippets:
+        parts.append(
+            "Citation:\n"
+            "- If you use Semantic Scholar snippets, include at least 1 URL from the snippets in your reply.\n"
+        )
     if persona_key in {"hikari", "rei"}:
         parts.append(
             "Goal:\n"
-            "- Make 1 short concrete point.\n"
+            "- Make 1–2 short concrete points.\n"
             "- Respond to the previous speaker.\n"
             "- End with 1 short question or next step.\n"
         )
@@ -499,26 +673,62 @@ def run_due_debate_turn_with_db(
     try:
         turns = _load_recent_turns(db, thread, limit=18)
         history = _turns_text(turns)
-        db_context = _relevant_papers_text(db, thread.topic, limit=3)
-        ss_snips = _semantic_scholar_text(thread.topic, limit=3)
+        db_context = _relevant_papers_text(db, topic=thread.topic, history=history, limit=3)
+        ss_snips = ""
+        ss_urls: list[str] = []
 
         system = _build_system_prompt(
             persona=persona,
-            role=("moderator" if speaker_key == thread.moderator_key else "duo"),
+            role=role,
         )
-        user = _build_user_prompt(
+
+        llm = get_llm(persona.llm_provider)
+
+        plan_user = _build_user_prompt(
             topic=thread.topic,
             persona_key=speaker_key,
             history=history,
             db_context=db_context,
-            semantic_scholar_snippets=ss_snips,
+            semantic_scholar_snippets="",
+            semantic_scholar_tool_available=settings.discord_debate_semantic_scholar,
+            allow_semantic_scholar_query=True,
         )
 
-        llm = get_llm(persona.llm_provider)
-        payload = llm.generate_json(system=system, user=user, json_schema=_debate_turn_schema())
-        reply = str((payload or {}).get("reply") or "").strip()
+        plan_payload = llm.generate_json(system=system, user=plan_user, json_schema=_debate_turn_plan_schema())
+        ss_query = str((plan_payload or {}).get("semantic_scholar_query") or "").strip()
+        reply = str((plan_payload or {}).get("reply") or "").strip()
+
+        if ss_query and settings.discord_debate_semantic_scholar:
+            ss_snips, ss_urls = _semantic_scholar_search_text(ss_query, limit=3)
+            tool_user = _build_user_prompt(
+                topic=thread.topic,
+                persona_key=speaker_key,
+                history=history,
+                db_context=db_context,
+                semantic_scholar_snippets=(f"Query: {ss_query}\n{ss_snips}".strip() if ss_snips else f"Query: {ss_query}\n(no results)"),
+                semantic_scholar_tool_available=True,
+                allow_semantic_scholar_query=False,
+            )
+            payload = llm.generate_json(system=system, user=tool_user, json_schema=_debate_turn_schema())
+            reply = str((payload or {}).get("reply") or "").strip()
+
+        if not reply:
+            fallback_user = _build_user_prompt(
+                topic=thread.topic,
+                persona_key=speaker_key,
+                history=history,
+                db_context=db_context,
+                semantic_scholar_snippets="",
+                semantic_scholar_tool_available=settings.discord_debate_semantic_scholar,
+                allow_semantic_scholar_query=False,
+            )
+            payload = llm.generate_json(system=system, user=fallback_user, json_schema=_debate_turn_schema())
+            reply = str((payload or {}).get("reply") or "").strip()
+
         if not reply:
             raise ValueError("Empty LLM output.")
+        reply = _append_semantic_scholar_sources(reply, ss_urls)
+        reply = _compact_chat_reply(reply) or reply
     except Exception as e:  # noqa: BLE001
         detail = f"{type(e).__name__}: {e}"
         if isinstance(e, LLMOutputParseError):
@@ -581,7 +791,7 @@ def run_due_debate_turn_with_db(
     else:
         thread.duo_turns_since_moderation = int(thread.duo_turns_since_moderation or 0) + 1
         thread.next_duo_speaker_key = _duo_other(speaker_key)
-        if thread.duo_turns_since_moderation >= 3:
+        if thread.duo_turns_since_moderation >= 6:
             thread.next_speaker_key = thread.moderator_key
         else:
             thread.next_speaker_key = thread.next_duo_speaker_key
