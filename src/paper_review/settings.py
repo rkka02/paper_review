@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     google_ai_api_key: str | None = Field(default=None, alias="GOOGLE_AI_API_KEY")
     google_ai_model: str = Field(default="gemini-1.5-flash", alias="GOOGLE_AI_MODEL")
     google_ai_timeout_seconds: int = Field(default=120, alias="GOOGLE_AI_TIMEOUT_SECONDS")
-    google_ai_max_output_tokens: int = Field(default=2048, alias="GOOGLE_AI_MAX_OUTPUT_TOKENS")
+    google_ai_max_output_tokens: int = Field(default=4096, alias="GOOGLE_AI_MAX_OUTPUT_TOKENS")
 
     embeddings_normalize: bool = Field(default=True, alias="EMBEDDINGS_NORMALIZE")
 

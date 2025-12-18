@@ -131,7 +131,7 @@ DISCORD_PERSONA_DEFAULT_LLM_PROVIDER=openai
 - 한 메시지에는 페르소나 Role을 **1개만** 멘션하세요(여러 개면 어떤 페르소나로 처리될지 보장되지 않음).
 - 특정 논문을 지정하려면 DOI 또는 paper id(UUID)를 같이 보내면 정확도가 올라갑니다.
 
-### 토론 모드(스레드, 히카리↔레이 + 3턴마다 츠구미 점검)
+### 토론 모드(스레드, 히카리↔레이 + 6턴마다 츠구미 점검)
 - 토론은 **스레드에서만** 동작합니다(스레드에서 멘션하면 답장도 그 스레드로 갑니다).
 - 시작: `@히카리 토론 시작: <주제>` (또는 `@레이 토론 시작: ...`)
 - 종료: `@히카리 토론 종료`
@@ -140,7 +140,7 @@ DISCORD_PERSONA_DEFAULT_LLM_PROVIDER=openai
 - 즉시 다음 턴: `@히카리 토론 다음`
 - 개입: 토론 중에는 스레드에 **그냥 메시지로** 방향/조건/제약을 남기면, 다음 턴에 반영합니다.
 - 설정(.env): `DISCORD_DEBATE_ENABLED`, `DISCORD_DEBATE_MIN_INTERVAL_SECONDS`, `DISCORD_DEBATE_MAX_INTERVAL_SECONDS`, `DISCORD_DEBATE_MAX_TURNS_PER_THREAD`
-  - (선택) `DISCORD_DEBATE_SEMANTIC_SCHOLAR=true`면 매 턴 Semantic Scholar 검색 스니펫을 같이 붙입니다(레이트리밋 주의).
+  - (선택) `DISCORD_DEBATE_SEMANTIC_SCHOLAR=true`면 토론 중 필요할 때 Semantic Scholar 검색을 사용할 수 있습니다(레이트리밋 주의).
 
 ### Discord 알림(추천 완료/실패)
 추천 작업(수동 Run / 스케줄러 auto-run)이 끝나면 Discord 웹훅으로 알립니다.
