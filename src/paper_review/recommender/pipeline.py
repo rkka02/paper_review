@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 import time
 import uuid
 from dataclasses import asdict, dataclass
@@ -13,6 +14,59 @@ from paper_review.recommender.query import LLMQueryGenerator
 from paper_review.recommender.seed import RandomSeedSelector, SeedSelector
 from paper_review.schemas import RecommendationItemIn, RecommendationRunCreate
 from paper_review.semantic_scholar import fetch_citations_by_doi, fetch_references_by_doi, search_papers
+
+
+_DOI_RE = re.compile(r"(10\.\d{4,9}/[-._;()/:A-Z0-9]+)", re.IGNORECASE)
+_ARXIV_RE = re.compile(r"(?:arxiv\\.org/(?:abs|pdf)/|arxiv:)(\\d{4}\\.\\d{4,5}(?:v\\d+)?)", re.IGNORECASE)
+
+
+def _normalize_doi(text: str | None) -> str | None:
+    raw = (text or "").strip()
+    if not raw:
+        return None
+
+    m = _DOI_RE.search(raw)
+    if m:
+        return (m.group(1) or "").strip().lower() or None
+
+    lowered = raw.lower()
+    for prefix in ("doi:", "https://doi.org/", "http://doi.org/"):
+        if lowered.startswith(prefix):
+            candidate = raw[len(prefix) :].strip()
+            m2 = _DOI_RE.search(candidate)
+            if m2:
+                return (m2.group(1) or "").strip().lower() or None
+            return None
+
+    return None
+
+
+def _normalize_title(text: str | None) -> str:
+    s = (text or "").strip().lower()
+    if not s:
+        return ""
+    s = re.sub(r"[^0-9a-z가-힣]+", " ", s)
+    s = " ".join(s.split())
+    return s
+
+
+def _extract_arxiv_id(text: str | None) -> str | None:
+    raw = (text or "").strip()
+    if not raw:
+        return None
+    m = _ARXIV_RE.search(raw)
+    if not m:
+        return None
+    arx = (m.group(1) or "").strip().lower()
+    if not arx:
+        return None
+    if arx.endswith(".pdf"):
+        arx = arx[: -len(".pdf")]
+    if "v" in arx:
+        base, _, v = arx.rpartition("v")
+        if base and v.isdigit():
+            arx = base
+    return arx or None
 
 
 def _dot(a: list[float], b: list[float]) -> float:
@@ -249,6 +303,7 @@ def build_recommendations(
     *,
     folders: list[dict],
     paper_summaries: list[dict],
+    excludes: list[dict] | None = None,
     config: RecommenderConfig | None = None,
     embedder: Embedder | None = None,
     query_llm: JsonLLM | None = None,
@@ -276,6 +331,41 @@ def build_recommendations(
 
     library_dois = {((p.get("doi") or "").strip().lower()) for p in library if (p.get("doi") or "").strip()}
     library_titles = {((p.get("title") or "").strip().lower()) for p in library if (p.get("title") or "").strip()}
+
+    ex_dois: set[str] = set()
+    ex_arxiv_ids: set[str] = set()
+    ex_s2_ids: set[str] = set()
+    ex_title_norms: set[str] = set()
+    for ex in excludes or []:
+        if not isinstance(ex, dict):
+            continue
+        doi_norm = _normalize_doi(ex.get("doi_norm")) or _normalize_doi(ex.get("doi")) or _normalize_doi(ex.get("url"))
+        if doi_norm:
+            ex_dois.add(doi_norm)
+        arxiv_id = (ex.get("arxiv_id") or "").strip().lower()
+        if arxiv_id:
+            ex_arxiv_ids.add(arxiv_id)
+        s2_id = (ex.get("semantic_scholar_paper_id") or "").strip()
+        if s2_id:
+            ex_s2_ids.add(s2_id)
+        title_norm = (ex.get("title_norm") or "").strip().lower()
+        if title_norm:
+            ex_title_norms.add(title_norm)
+
+    def is_excluded(c: dict) -> bool:
+        s2 = (c.get("paper_id") or "").strip()
+        if s2 and s2 in ex_s2_ids:
+            return True
+        doi = _normalize_doi(c.get("doi")) or _normalize_doi(c.get("url"))
+        if doi and doi in ex_dois:
+            return True
+        arx = _extract_arxiv_id(c.get("url"))
+        if arx and arx in ex_arxiv_ids:
+            return True
+        tn = _normalize_title(c.get("title"))
+        if tn and tn in ex_title_norms:
+            return True
+        return False
 
     by_folder: dict[str, list[dict]] = {}
     for p in library:
@@ -380,6 +470,22 @@ def build_recommendations(
             "Filtered candidates already in library: "
             f"folders={sum(len(candidate_keys_by_folder[f]) for f in folder_ids)} cross={len(cross_candidate_keys)}"
         )
+
+    if ex_dois or ex_arxiv_ids or ex_s2_ids or ex_title_norms:
+        before_folders = sum(len(candidate_keys_by_folder[f]) for f in folder_ids)
+        before_cross = len(cross_candidate_keys)
+
+        for fid in folder_ids:
+            candidate_keys_by_folder[fid] = {k for k in candidate_keys_by_folder[fid] if not is_excluded(candidate_by_key[k])}
+        cross_candidate_keys = {k for k in cross_candidate_keys if not is_excluded(candidate_by_key[k])}
+
+        after_folders = sum(len(candidate_keys_by_folder[f]) for f in folder_ids)
+        after_cross = len(cross_candidate_keys)
+        if progress:
+            progress(
+                "Filtered candidates excluded by user: "
+                f"folders={before_folders}->{after_folders} cross={before_cross}->{after_cross}"
+            )
 
     folder_texts: list[str] = [_paper_text(p) for p in library]
     folder_vecs = embedder.embed_passages(folder_texts)

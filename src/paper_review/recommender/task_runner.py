@@ -17,6 +17,7 @@ from paper_review.models import (
     Folder,
     Paper,
     PaperEmbedding,
+    RecommendationExclude,
     RecommendationItem,
     RecommendationRun,
     RecommendationTask,
@@ -347,6 +348,18 @@ def run_recommendation_task(task_id: uuid.UUID) -> None:
                 .scalars()
                 .all()
             )
+            excludes = db.execute(select(RecommendationExclude).order_by(desc(RecommendationExclude.created_at))).scalars().all()
+
+        excludes_in = [
+            {
+                "doi_norm": e.doi_norm,
+                "arxiv_id": e.arxiv_id,
+                "semantic_scholar_paper_id": e.semantic_scholar_paper_id,
+                "title_norm": e.title_norm,
+                "title": e.title,
+            }
+            for e in excludes
+        ]
 
         folders_in = [{"id": str(f.id), "name": f.name, "parent_id": str(f.parent_id) if f.parent_id else None} for f in folders]
         paper_summaries = []
@@ -391,6 +404,7 @@ def run_recommendation_task(task_id: uuid.UUID) -> None:
         payload = build_recommendations(
             folders=folders_in,
             paper_summaries=paper_summaries,
+            excludes=excludes_in,
             config=cfg,
             embedder=embedder,
             query_llm=query_llm,

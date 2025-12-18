@@ -306,6 +306,29 @@ class RecommendationItem(Base):
     run: Mapped[RecommendationRun] = relationship(back_populates="items")
 
 
+class RecommendationExclude(Base):
+    __tablename__ = "recommendation_excludes"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    doi_norm: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    arxiv_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    semantic_scholar_paper_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    title_norm: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    source_item_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("recommendation_items.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class RecommendationTask(Base):
     __tablename__ = "recommendation_tasks"
 

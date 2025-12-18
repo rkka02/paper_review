@@ -344,6 +344,7 @@ def recommend(
         ) as client:
             folders = client.fetch_folders()
             paper_summaries = client.fetch_papers_summary()
+            excludes = client.fetch_recommendation_excludes()
 
             if sync_embeddings and not dry_run:
                 missing_ids = client.fetch_missing_paper_embeddings(
@@ -391,6 +392,7 @@ def recommend(
             payload = build_recommendations(
                 folders=folders,
                 paper_summaries=paper_summaries,
+                excludes=excludes,
                 config=RecommenderConfig(
                     per_folder=per_folder,
                     cross_domain=cross_domain,

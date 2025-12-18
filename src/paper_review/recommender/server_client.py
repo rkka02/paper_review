@@ -113,6 +113,19 @@ class ServerClient:
         data = r.json()
         return RecommendationRunOut.model_validate(data)
 
+    def fetch_recommendation_excludes(self, *, limit: int = 5000, offset: int = 0) -> list[dict]:
+        r = self._client.get(
+            _url(self.base_url, "/api/recommendations/excludes"),
+            params={"limit": str(int(limit)), "offset": str(int(offset))},
+        )
+        if r.status_code == 404:
+            return []
+        r.raise_for_status()
+        data = r.json()
+        if not isinstance(data, list):
+            raise RuntimeError("Unexpected /api/recommendations/excludes response.")
+        return data
+
 
 def fetch_folders(*, base_url: str, api_key: str | None) -> list[dict]:
     with ServerClient(base_url=base_url, api_key=api_key, timeout_seconds=30.0) as client:

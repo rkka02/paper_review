@@ -232,3 +232,20 @@ class RecommendationTaskOut(BaseModel):
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+
+
+class RecommendationExcludeCreate(BaseModel):
+    item_id: uuid.UUID
+    reason: str | None = None
+
+
+class RecommendationExcludeOut(BaseModel):
+    id: uuid.UUID
+    doi_norm: str | None
+    arxiv_id: str | None
+    semantic_scholar_paper_id: str | None
+    title: str | None
+    title_norm: str
+    reason: str | None
+    source_item_id: uuid.UUID | None
+    created_at: datetime

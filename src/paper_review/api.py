@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import secrets
 import uuid
 from datetime import datetime, timezone
@@ -8,7 +9,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel, ValidationError
-from sqlalchemy import delete, desc, select, update
+from sqlalchemy import delete, desc, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import HTMLResponse
@@ -27,6 +28,7 @@ from paper_review.models import (
     PaperLink,
     PaperMetadata,
     RecommendationItem,
+    RecommendationExclude,
     RecommendationRun,
     RecommendationTask,
     Review,
@@ -54,6 +56,8 @@ from paper_review.schemas import (
     RecommendationItemOut,
     RecommendationTaskCreate,
     RecommendationTaskOut,
+    RecommendationExcludeCreate,
+    RecommendationExcludeOut,
 )
 from paper_review.settings import settings
 
@@ -88,6 +92,115 @@ def _maybe_mark_stale_recommender_task(db: Session, task: RecommendationTask) ->
     task.finished_at = _utcnow()
     db.add(task)
     db.flush()
+
+
+_DOI_RE = re.compile(r"(10\.\d{4,9}/[-._;()/:A-Z0-9]+)", re.IGNORECASE)
+_ARXIV_RE = re.compile(r"arxiv\.org/(?:abs|pdf)/([^?#\s<>]+)", re.IGNORECASE)
+
+
+def _normalize_doi(text: str | None) -> str | None:
+    raw = (text or "").strip()
+    if not raw:
+        return None
+
+    m = _DOI_RE.search(raw)
+    if m:
+        return (m.group(1) or "").strip().lower() or None
+
+    lowered = raw.lower()
+    for prefix in ("doi:", "https://doi.org/", "http://doi.org/"):
+        if lowered.startswith(prefix):
+            candidate = raw[len(prefix) :].strip()
+            m2 = _DOI_RE.search(candidate)
+            if m2:
+                return (m2.group(1) or "").strip().lower() or None
+            return None
+
+    return None
+
+
+def _normalize_title(text: str | None) -> str:
+    s = (text or "").strip().lower()
+    if not s:
+        return ""
+    s = re.sub(r"[^0-9a-z가-힣]+", " ", s)
+    s = " ".join(s.split())
+    return s
+
+
+def _extract_arxiv_id(text: str | None) -> str | None:
+    raw = (text or "").strip()
+    if not raw:
+        return None
+    m = _ARXIV_RE.search(raw)
+    if not m:
+        return None
+    arx = (m.group(1) or "").strip().lower()
+    if not arx:
+        return None
+    if arx.endswith(".pdf"):
+        arx = arx[: -len(".pdf")]
+    if "v" in arx:
+        base, _, v = arx.rpartition("v")
+        if base and v.isdigit():
+            arx = base
+    return arx or None
+
+
+def _filter_excluded_recommendations(db: Session, items: list[RecommendationItem]) -> list[RecommendationItem]:
+    if not items:
+        return items
+
+    dois: set[str] = set()
+    for i in items:
+        doi = _normalize_doi(i.doi) or _normalize_doi(i.url)
+        if doi:
+            dois.add(doi)
+    s2_ids = {
+        (str(i.semantic_scholar_paper_id).strip())
+        for i in items
+        if (i.semantic_scholar_paper_id or "").strip()
+    }
+    arxiv_ids = {_extract_arxiv_id(i.url) for i in items if _extract_arxiv_id(i.url)}
+    titles = {_normalize_title(i.title) for i in items if _normalize_title(i.title)}
+
+    conds = []
+    if dois:
+        conds.append(RecommendationExclude.doi_norm.in_(sorted(dois)))
+    if s2_ids:
+        conds.append(RecommendationExclude.semantic_scholar_paper_id.in_(sorted(s2_ids)))
+    if arxiv_ids:
+        conds.append(RecommendationExclude.arxiv_id.in_(sorted(arxiv_ids)))
+    if titles:
+        conds.append(RecommendationExclude.title_norm.in_(sorted(titles)))
+    if not conds:
+        return items
+
+    excludes = db.execute(select(RecommendationExclude).where(or_(*conds))).scalars().all()
+    if not excludes:
+        return items
+
+    ex_doi = {e.doi_norm for e in excludes if (e.doi_norm or "").strip()}
+    ex_s2 = {e.semantic_scholar_paper_id for e in excludes if (e.semantic_scholar_paper_id or "").strip()}
+    ex_arx = {e.arxiv_id for e in excludes if (e.arxiv_id or "").strip()}
+    ex_title = {e.title_norm for e in excludes if (e.title_norm or "").strip()}
+
+    out: list[RecommendationItem] = []
+    for it in items:
+        s2 = (it.semantic_scholar_paper_id or "").strip()
+        if s2 and s2 in ex_s2:
+            continue
+        doi = _normalize_doi(it.doi) or _normalize_doi(it.url)
+        if doi and doi in ex_doi:
+            continue
+        arx = _extract_arxiv_id(it.url)
+        if arx and arx in ex_arx:
+            continue
+        tn = _normalize_title(it.title)
+        if tn and tn in ex_title:
+            continue
+        out.append(it)
+    return out
 
 
 def _extract_evidence_rows(canonical: dict) -> list[dict]:
@@ -1067,6 +1180,7 @@ def get_latest_recommendations(db: Session = Depends(get_db)) -> RecommendationR
             int(i.rank or 0),
         ),
     )
+    items = _filter_excluded_recommendations(db, items)
     return RecommendationRunOut(
         id=run.id,
         source=run.source,
@@ -1074,6 +1188,88 @@ def get_latest_recommendations(db: Session = Depends(get_db)) -> RecommendationR
         created_at=run.created_at,
         items=[RecommendationItemOut.model_validate(it, from_attributes=True) for it in items],
     )
+
+
+@app.post(
+    "/api/recommendations/excludes",
+    response_model=RecommendationExcludeOut,
+    dependencies=[Depends(_require_auth)],
+)
+def exclude_recommendation(payload: RecommendationExcludeCreate, db: Session = Depends(get_db)) -> RecommendationExcludeOut:
+    item = db.get(RecommendationItem, payload.item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Recommendation item not found.")
+
+    doi_norm = _normalize_doi(item.doi) or _normalize_doi(item.url)
+    arxiv_id = _extract_arxiv_id(item.url)
+    s2_id = (item.semantic_scholar_paper_id or "").strip() or None
+    title = (item.title or "").strip() or None
+    title_norm = _normalize_title(title)
+
+    if not any([doi_norm, arxiv_id, s2_id, title_norm]):
+        raise HTTPException(status_code=400, detail="Cannot build exclusion key from item.")
+
+    conds = []
+    if doi_norm:
+        conds.append(RecommendationExclude.doi_norm == doi_norm)
+    if arxiv_id:
+        conds.append(RecommendationExclude.arxiv_id == arxiv_id)
+    if s2_id:
+        conds.append(RecommendationExclude.semantic_scholar_paper_id == s2_id)
+    if title_norm:
+        conds.append(RecommendationExclude.title_norm == title_norm)
+
+    existing = (
+        db.execute(select(RecommendationExclude).where(or_(*conds)).order_by(desc(RecommendationExclude.created_at)).limit(1))
+        .scalars()
+        .first()
+    )
+    if existing:
+        if payload.reason and not (existing.reason or "").strip():
+            existing.reason = payload.reason.strip()
+            db.add(existing)
+            db.flush()
+            db.refresh(existing)
+        return RecommendationExcludeOut.model_validate(existing, from_attributes=True)
+
+    ex = RecommendationExclude(
+        doi_norm=doi_norm,
+        arxiv_id=arxiv_id,
+        semantic_scholar_paper_id=s2_id,
+        title=title,
+        title_norm=title_norm or "(untitled)",
+        reason=(payload.reason or "").strip() or None,
+        source_item_id=item.id,
+    )
+    db.add(ex)
+    db.flush()
+    db.refresh(ex)
+    return RecommendationExcludeOut.model_validate(ex, from_attributes=True)
+
+
+@app.get(
+    "/api/recommendations/excludes",
+    response_model=list[RecommendationExcludeOut],
+    dependencies=[Depends(_require_auth)],
+)
+def list_recommendation_excludes(
+    limit: int = 500,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+) -> list[RecommendationExcludeOut]:
+    limit = max(1, min(int(limit), 5000))
+    offset = max(0, int(offset))
+    rows = (
+        db.execute(
+            select(RecommendationExclude)
+            .order_by(desc(RecommendationExclude.created_at))
+            .limit(limit)
+            .offset(offset)
+        )
+        .scalars()
+        .all()
+    )
+    return [RecommendationExcludeOut.model_validate(r, from_attributes=True) for r in rows]
 
 
 @app.get(

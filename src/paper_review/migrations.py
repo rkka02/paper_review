@@ -171,6 +171,33 @@ def apply_migrations(engine: Engine) -> None:
         "create index if not exists recommendation_tasks_trigger_idx on recommendation_tasks(trigger);",
         "create index if not exists recommendation_tasks_created_at_idx on recommendation_tasks(created_at);",
         """
+        create table if not exists recommendation_excludes (
+          id uuid primary key,
+          doi_norm text,
+          arxiv_id text,
+          semantic_scholar_paper_id text,
+          title text,
+          title_norm text not null,
+          reason text,
+          source_item_id uuid references recommendation_items(id) on delete set null,
+          created_at timestamptz not null default now()
+        );
+        """,
+        "alter table recommendation_excludes add column if not exists doi_norm text;",
+        "alter table recommendation_excludes add column if not exists arxiv_id text;",
+        "alter table recommendation_excludes add column if not exists semantic_scholar_paper_id text;",
+        "alter table recommendation_excludes add column if not exists title text;",
+        "alter table recommendation_excludes add column if not exists title_norm text;",
+        "alter table recommendation_excludes add column if not exists reason text;",
+        "alter table recommendation_excludes add column if not exists source_item_id uuid;",
+        "alter table recommendation_excludes add column if not exists created_at timestamptz;",
+        "create index if not exists recommendation_excludes_title_norm_idx on recommendation_excludes(title_norm);",
+        "create index if not exists recommendation_excludes_source_item_idx on recommendation_excludes(source_item_id);",
+        "create unique index if not exists recommendation_excludes_doi_uniq on recommendation_excludes(doi_norm) where doi_norm is not null;",
+        "create unique index if not exists recommendation_excludes_arxiv_uniq on recommendation_excludes(arxiv_id) where arxiv_id is not null;",
+        "create unique index if not exists recommendation_excludes_s2_uniq "
+        "on recommendation_excludes(semantic_scholar_paper_id) where semantic_scholar_paper_id is not null;",
+        """
         create table if not exists discord_debate_threads (
           id uuid primary key,
           discord_thread_id bigint not null,

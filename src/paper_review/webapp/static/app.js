@@ -1562,6 +1562,17 @@ function renderRecs(run) {
       } else {
         titleEl.appendChild(createEl("span", { text: String(it?.title || "(untitled)") }));
       }
+      const excludeBtn = createEl("button", {
+        className: "btn btn-ghost btn-small",
+        text: "Exclude",
+        attrs: { type: "button" },
+      });
+      excludeBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        excludeRecommendation(it?.id);
+      });
+      titleEl.appendChild(excludeBtn);
 
       const metaParts = [];
       if (it?.year) metaParts.push(String(it.year));
@@ -1766,6 +1777,25 @@ async function refreshRecommendations({ silent = false } = {}) {
       return;
     }
     if (!silent) toast(String(e.message || e), "error", 6500);
+  }
+}
+
+async function excludeRecommendation(itemId) {
+  const id = String(itemId || "").trim();
+  if (!id) return;
+  const ok = confirm("이 추천을 제외할까? (다음부터 목록에 안 나오게 할게)");
+  if (!ok) return;
+  try {
+    await api("/api/recommendations/excludes", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ item_id: id }),
+    });
+    toast("Excluded.", "info");
+    await refreshRecommendations({ silent: true });
+    if (isRecsOpen()) renderRecs(latestRecs);
+  } catch (e) {
+    toast(String(e.message || e), "error", 6500);
   }
 }
 
