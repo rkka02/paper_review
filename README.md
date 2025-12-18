@@ -33,7 +33,7 @@
 - API: `paper-review serve`
 - Worker: `paper-review worker`
 
-## Web UI
+## Web UI 
 
 - 브라우저에서 `http://127.0.0.1:8000` 접속
 - 현재 UI의 New paper는 **Analysis JSON 업로드/붙여넣기**를 기본 입력으로 사용합니다.
