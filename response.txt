@@ -1,15 +1,3 @@
-Gemini raw response (1/2):
-```text
-{
-  "candidates": [
-    {
-      "content": {
-        "parts": [
-          {
-            "text": "{\n  \"reply\": \"<@14508525244",
-            "thoughtSignature": "EtUMCtIMAXLI2nwxDkSx8QkPclIYz+wiU61+V3rgeISYNnILVnjxLEheym5facnE/sGbR1uUwjYwi6UhjMeZI4MpYcjEz/bjVuAxp6VHTdQM0f8wK9bOgOiMuMTc2rGhmqQcXkc6JoAP5/EKdvP0Dz+NR/tCd9yQUZ8ofS5U4z2cwdMnA9wC+ctcR1vAB1VkLlBE69dYlExyN2Q2IL/0GiJzbrsrMOLp9Xebh8P7onCbtqZqVTfU+KMB+lc1y1NWxx6kQqWIFsP6oGQ6GtTrhq1hnjWEaiJEcXwZC54rLJmh4yQ59zpitKMvAdeRSXcEMzc44AO06XxttCnH5C/cnVlKWEcglp0dyx/bsPo6OvhL2Mrv7J0zZtoXaDCTFQqYLkHt27bWd4e2zR0uJYO7w3L/ZPQaNuZZzsQqpvwsFPvlZ5EM7rBziyCWQw3lsGoMiKd//lX6oqoBPZ2FbyDCTu732aAKEZWxhka1kUflfBqn1GtJL4j9o5QEog8MRlIBiHt/vuytGbgPbKYJCfstHwE/8jquROaCAxx8lhX4tISZED25fqFdBtQckTjZOIPAin/KVyabhZgTAOzfLPIFm/ao/BfB5bHqwpdwYZX+cA9McHsO92SaxlpXFSJl0bD+xmIVhFhAZvIBKqFjlPIQqZJ8gWPpEMga1YiLtSkTkAuyqgFT5dWLPFicZlqB90tTumChP7y9pJECWGikwSpDMpXMS79wesQc5LkAiBiCp8eWVWG+N++B6ZwrC2BnJToQkI+/pZUpC8QGJm+YcytGVEY+yp0vkfjwIWzJGiR4UJ4L+FCb9Va7+/mT4gyh+8KR5D4gelSsDguGhQN47U1bbOTzHi2Dhah2wGbRM5T+Ioiac7sl/OtJJrGabu6TANODjrIyQyG74jQOFlcG6+lY4gruuqYoDZW+x8bDAosMyUArmbJNgz4RvNZg1zrH42SAwzoCAv1HMafzZFQx8gfrnMDwzpGHVeGuZ5lXc1tV7AC1W+lkDKwbgSFvG3fks7iXTdPGF+rCLB7C9wHBtRkqJrf32gGiLQHK8ehtfz3TkhTyiG4a6VTZQ+vLmnMMYxAB3bggt2zA+pExvvnNmFH4wGd25vEL6eo0YunDJFongvf6uN+cxo3zKnH8I020dYIzRpZbtMoGr+d8S6wgy9IHh2rhKMDvR0TpGEt51fqmfS+xPWYzkHWhljnvFvLbtoeTItDSwaVu9SBCBVVYdmYr3fk9OJgb1TMydMxIHVoWhRWf7s/cQ7jeLhppFJjzdXfi1ox1TSTBCiaEv0i2NB4ZCvCWXBDKSJkVFcKFpysExDfkIHnNu87NfixM
-```
-
 Gemini raw response (2/2):
 ```text
 xwdPfqDRfI+G1e2HLYa+cIm2GiL6vliaS9jtmcbCdzezHrlktm5FjcWI+OHCmuu0hksNjfjPc2xSC+pSLo82MsjVONrZMoc21QDCht4hi5gJK0p03F7LrWi7BPwGLC56963MHe2+50pmcZ2xq07gdqx2OlulxkoidkrcNn7R8GobbfS2MjD7cz284AZMk+s4KgGPjj5c5tFqPWPBi/rbnbErVph97/5oGxnVh5xfi46gkrgrnTXBFcZn661JaFef4vwaN4r73MASOMlQa++DRLvd4AYdF3Amm4vXbEcQlN8bJFi5NqUyQ+POscot1CS7+aISGqo9W2HbGf+QMhvBWhh6FkutrnwZtJC8UJempV3mF7zUsVYtty585Ak/OhRDkkpIeQi/b0xw+gWDDqQqNpC/t0T+Bjo3ZqGT6+cyo/S1iMN0IdWlRSp9Ooc+YVB32LDzHoaaO+7zYT+Zjdj5SV35eYHVmx4GttR6ERdAT5xBspaiMTO9WGWvNFjdjPkxlrBfp26JimbuKNYBM4us+RcaMXF8LCn5dBPPwlamrqdDdIvU9A3JXy74PadKnS8yiWudx23yrifx0jL1xw1+boyhkzVwqJwNP377jEr8vzkF/vvJIquPfSSiHaxjcwQd2qgYuIILuNCTbTJTf9sB65/0QURHGhLNZEjOO4o/H+TaTCmOF2qu7nm5IRtk7b/G3dBsxZ1Ur4pURWkXZLbY1uI2YIQsTjwVIPZpAMT5SKhBS1PMJkKgX5Mfk9/f4YbM6T6ooi6LZCFsycmmsQkEXEnczseqIknsOh3QJYk5kADXmJvWVjCsqIK7ZOEv2w=="
@@ -36,4 +24,14 @@ xwdPfqDRfI+G1e2HLYa+cIm2GiL6vliaS9jtmcbCdzezHrlktm5FjcWI+OHCmuu0hksNjfjPc2xSC+pS
   "modelVersion": "gemini-3-flash-preview",
   "responseId": "KwVDaZyxJdK30-kPztOM0AI"
 }
+```Gemini raw response (1/2):
+```text
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "{\n  \"reply\": \"<@14508525244",
+            "thoughtSignature": "EtUMCtIMAXLI2nwxDkSx8QkPclIYz+wiU61+V3rgeISYNnILVnjxLEheym5facnE/sGbR1uUwjYwi6UhjMeZI4MpYcjEz/bjVuAxp6VHTdQM0f8wK9bOgOiMuMTc2rGhmqQcXkc6JoAP5/EKdvP0Dz+NR/tCd9yQUZ8ofS5U4z2cwdMnA9wC+ctcR1vAB1VkLlBE69dYlExyN2Q2IL/0GiJzbrsrMOLp9Xebh8P7onCbtqZqVTfU+KMB+lc1y1NWxx6kQqWIFsP6oGQ6GtTrhq1hnjWEaiJEcXwZC54rLJmh4yQ59zpitKMvAdeRSXcEMzc44AO06XxttCnH5C/cnVlKWEcglp0dyx/bsPo6OvhL2Mrv7J0zZtoXaDCTFQqYLkHt27bWd4e2zR0uJYO7w3L/ZPQaNuZZzsQqpvwsFPvlZ5EM7rBziyCWQw3lsGoMiKd//lX6oqoBPZ2FbyDCTu732aAKEZWxhka1kUflfBqn1GtJL4j9o5QEog8MRlIBiHt/vuytGbgPbKYJCfstHwE/8jquROaCAxx8lhX4tISZED25fqFdBtQckTjZOIPAin/KVyabhZgTAOzfLPIFm/ao/BfB5bHqwpdwYZX+cA9McHsO92SaxlpXFSJl0bD+xmIVhFhAZvIBKqFjlPIQqZJ8gWPpEMga1YiLtSkTkAuyqgFT5dWLPFicZlqB90tTumChP7y9pJECWGikwSpDMpXMS79wesQc5LkAiBiCp8eWVWG+N++B6ZwrC2BnJToQkI+/pZUpC8QGJm+YcytGVEY+yp0vkfjwIWzJGiR4UJ4L+FCb9Va7+/mT4gyh+8KR5D4gelSsDguGhQN47U1bbOTzHi2Dhah2wGbRM5T+Ioiac7sl/OtJJrGabu6TANODjrIyQyG74jQOFlcG6+lY4gruuqYoDZW+x8bDAosMyUArmbJNgz4RvNZg1zrH42SAwzoCAv1HMafzZFQx8gfrnMDwzpGHVeGuZ5lXc1tV7AC1W+lkDKwbgSFvG3fks7iXTdPGF+rCLB7C9wHBtRkqJrf32gGiLQHK8ehtfz3TkhTyiG4a6VTZQ+vLmnMMYxAB3bggt2zA+pExvvnNmFH4wGd25vEL6eo0YunDJFongvf6uN+cxo3zKnH8I020dYIzRpZbtMoGr+d8S6wgy9IHh2rhKMDvR0TpGEt51fqmfS+xPWYzkHWhljnvFvLbtoeTItDSwaVu9SBCBVVYdmYr3fk9OJgb1TMydMxIHVoWhRWf7s/cQ7jeLhppFJjzdXfi1ox1TSTBCiaEv0i2NB4ZCvCWXBDKSJkVFcKFpysExDfkIHnNu87NfixM
 ```

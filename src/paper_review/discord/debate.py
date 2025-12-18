@@ -204,7 +204,8 @@ def _build_system_prompt(*, persona: DiscordPersona, role: str) -> str:
         "한국어로 답해.",
         "기본 말투는 '친근한 반말'로 해. '합니다/하세요/드립니다' 같은 존댓말은 쓰지 마.",
         "문장 끝을 자연스러운 반말 종결(~해/~했어/~야/~지)로 마무리해.",
-        "Be concise (<= 15 lines).",
+        "아주 짧게 써. 최대 2~3줄, 길게 설명하지 마.",
+        "실제 사람이 채팅하는 것처럼 자연스럽게 써(목록/소제목/장문 금지).",
         "Hikari and Rei are rivals but also friends. Keep the vibe competitive but friendly (no insults).",
     ]
     if role == "moderator":
@@ -231,13 +232,14 @@ def _build_user_prompt(
         "- Stay on-topic and build on the ongoing debate.\n"
         "- Ground your claims (use DB context / Semantic Scholar snippets when relevant).\n"
         "- Avoid hallucinating missing fields.\n"
+        "- Keep your reply to 2–3 short lines.\n"
     )
     if persona_key in {"hikari", "rei"}:
         parts.append(
             "Goal:\n"
-            "- Make 1–2 concrete points.\n"
+            "- Make 1 short concrete point.\n"
             "- Respond to the previous speaker.\n"
-            "- End with 1 question or next step.\n"
+            "- End with 1 short question or next step.\n"
         )
     else:
         parts.append(
