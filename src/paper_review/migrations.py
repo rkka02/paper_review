@@ -1,6 +1,87 @@
 from __future__ import annotations
 
-from sqlalchemy.engine import Engine
+import re
+
+from sqlalchemy.engine import Connection, Engine
+
+_CREATE_TABLE_RE = re.compile(
+    r"^create\s+table\s+if\s+not\s+exists\s+(?P<table>[\w\"]+(?:\.[\w\"]+)?)",
+    re.IGNORECASE,
+)
+_CREATE_INDEX_RE = re.compile(
+    r"^create\s+(?:unique\s+)?index\s+if\s+not\s+exists\s+(?P<index>[\w\"]+)",
+    re.IGNORECASE,
+)
+_ALTER_ADD_COLUMN_RE = re.compile(
+    r"^alter\s+table\s+(?P<table>[\w\"]+(?:\.[\w\"]+)?)\s+"
+    r"add\s+column\s+if\s+not\s+exists\s+(?P<column>[\w\"]+)",
+    re.IGNORECASE,
+)
+
+
+def _strip_quotes(ident: str) -> str:
+    s = (ident or "").strip()
+    if len(s) >= 2 and s[0] == '"' and s[-1] == '"':
+        return s[1:-1]
+    return s
+
+
+def _split_ident(name: str) -> tuple[str | None, str]:
+    s = _strip_quotes(name)
+    if "." in s:
+        left, right = s.split(".", 1)
+        return _strip_quotes(left), _strip_quotes(right)
+    return None, s
+
+
+def _load_schema_cache(conn: Connection) -> dict[str, set]:
+    tables = {
+        str(r[0]).lower()
+        for r in conn.exec_driver_sql(
+            "select table_name from information_schema.tables "
+            "where table_schema = 'public' and table_type = 'BASE TABLE'"
+        ).all()
+    }
+    columns = {
+        (str(r[0]).lower(), str(r[1]).lower())
+        for r in conn.exec_driver_sql(
+            "select table_name, column_name from information_schema.columns "
+            "where table_schema = 'public'"
+        ).all()
+    }
+    indexes = {
+        str(r[0]).lower()
+        for r in conn.exec_driver_sql("select indexname from pg_indexes where schemaname = 'public'").all()
+    }
+    return {"tables": tables, "columns": columns, "indexes": indexes}
+
+
+def _should_skip_statement(stmt: str, *, cache: dict[str, set]) -> bool:
+    raw = (stmt or "").strip()
+    if not raw:
+        return True
+
+    m_table = _CREATE_TABLE_RE.match(raw)
+    if m_table:
+        schema, table = _split_ident(m_table.group("table"))
+        if schema and schema.lower() != "public":
+            return False
+        return table.lower() in cache["tables"]
+
+    m_index = _CREATE_INDEX_RE.match(raw)
+    if m_index:
+        index = _strip_quotes(m_index.group("index")).lower()
+        return index in cache["indexes"]
+
+    m_column = _ALTER_ADD_COLUMN_RE.match(raw)
+    if m_column:
+        schema, table = _split_ident(m_column.group("table"))
+        _, column = _split_ident(m_column.group("column"))
+        if schema and schema.lower() != "public":
+            return False
+        return (table.lower(), column.lower()) in cache["columns"]
+
+    return False
 
 
 def apply_migrations(engine: Engine) -> None:
@@ -87,6 +168,7 @@ def apply_migrations(engine: Engine) -> None:
         "alter table paper_embeddings add column if not exists created_at timestamptz;",
         "alter table paper_embeddings add column if not exists updated_at timestamptz;",
         "create index if not exists paper_embeddings_provider_idx on paper_embeddings(provider);",
+        "alter table analysis_outputs add column if not exists canonical_json_ko jsonb;",
         """
         create table if not exists recommendation_runs (
           id uuid primary key,
@@ -136,9 +218,12 @@ def apply_migrations(engine: Engine) -> None:
         "alter table recommendation_items add column if not exists abstract text;",
         "alter table recommendation_items add column if not exists score double precision;",
         "alter table recommendation_items add column if not exists one_liner text;",
+        "alter table recommendation_items add column if not exists one_liner_ko text;",
         "alter table recommendation_items add column if not exists summary text;",
+        "alter table recommendation_items add column if not exists summary_ko text;",
         "alter table recommendation_items add column if not exists rationale jsonb;",
         "alter table recommendation_items add column if not exists created_at timestamptz;",
+        "alter table recommendation_items add column if not exists abstract_ko text;",
         "create index if not exists recommendation_items_run_id_idx on recommendation_items(run_id);",
         "create index if not exists recommendation_items_folder_id_idx on recommendation_items(folder_id);",
         "create index if not exists recommendation_items_kind_idx on recommendation_items(kind);",
@@ -251,7 +336,10 @@ def apply_migrations(engine: Engine) -> None:
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         conn.exec_driver_sql(f"select pg_advisory_lock({lock_key});")
         try:
+            cache = _load_schema_cache(conn)
             for stmt in statements:
+                if _should_skip_statement(stmt, cache=cache):
+                    continue
                 conn.exec_driver_sql(stmt)
         finally:
             conn.exec_driver_sql(f"select pg_advisory_unlock({lock_key});")

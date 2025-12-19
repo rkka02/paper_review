@@ -25,6 +25,11 @@ from paper_review.models import (
 from paper_review.recommender.pipeline import RecommenderConfig, build_recommendations
 from paper_review.recommender.seed import RandomSeedSelector
 from paper_review.settings import settings
+from paper_review.translation import (
+    translation_enabled,
+    translate_recommendation_texts,
+    translation_style,
+)
 
 
 def _utcnow() -> datetime:
@@ -120,10 +125,12 @@ def _build_llm_discord_notification(
         group_rows.append({"group": group, "items": items_sorted})
     group_rows.sort(key=lambda g: (0 if g.get("group") == "Cross-domain" else 1, str(g.get("group") or "")))
 
+    style = translation_style()
     system = (
         "You are a friendly librarian sending a Discord notification about today's paper recommendations.\n"
         "Write in Korean.\n"
-        "Use friendly informal speech (반말). Do NOT use honorifics like 합니다/하세요/드립니다.\n"
+        f"Tone: {style}\n"
+        "Use friendly informal speech (banmal). Avoid honorifics or formal endings.\n"
         "Be warm, helpful, and non-robotic.\n"
         "Output JSON only.\n"
     )
@@ -194,13 +201,41 @@ def _update_task(
         db.add(task)
 
 
-def _persist_recommendations(payload) -> uuid.UUID:
+def _persist_recommendations(payload, *, task_id: uuid.UUID | None = None) -> uuid.UUID:
     with db_session() as db:
         run = RecommendationRun(source=(payload.source or "server").strip() or "server", meta=payload.meta)
         db.add(run)
         db.flush()
 
+        do_translate = translation_enabled()
         for item in payload.items:
+            abstract = (item.abstract or "").strip() or None
+            one_liner = (item.one_liner or "").strip() or None
+            summary = (item.summary or "").strip() or None
+
+            abstract_ko = (getattr(item, "abstract_ko", None) or "").strip() or None
+            one_liner_ko = (getattr(item, "one_liner_ko", None) or "").strip() or None
+            summary_ko = (getattr(item, "summary_ko", None) or "").strip() or None
+
+            if do_translate and not any([abstract_ko, one_liner_ko, summary_ko]):
+                try:
+                    translated = translate_recommendation_texts(
+                        one_liner=one_liner,
+                        summary=summary,
+                        abstract=abstract,
+                    )
+                    if translated:
+                        one_liner_ko = translated.get("one_liner")
+                        summary_ko = translated.get("summary")
+                        abstract_ko = translated.get("abstract")
+                except Exception as e:  # noqa: BLE001
+                    if task_id:
+                        _append_log(
+                            task_id,
+                            f"Recommendation translate failed: {item.title} ({type(e).__name__}: {e})",
+                            level="error",
+                        )
+
             db.add(
                 RecommendationItem(
                     run_id=run.id,
@@ -214,10 +249,13 @@ def _persist_recommendations(payload) -> uuid.UUID:
                     year=item.year,
                     venue=(item.venue or "").strip() or None,
                     authors=item.authors,
-                    abstract=(item.abstract or "").strip() or None,
+                    abstract=abstract,
+                    abstract_ko=abstract_ko,
                     score=float(item.score) if item.score is not None else None,
-                    one_liner=(item.one_liner or "").strip() or None,
-                    summary=(item.summary or "").strip() or None,
+                    one_liner=one_liner,
+                    one_liner_ko=one_liner_ko,
+                    summary=summary,
+                    summary_ko=summary_ko,
                     rationale=item.rationale,
                 )
             )
@@ -414,7 +452,7 @@ def run_recommendation_task(task_id: uuid.UUID) -> None:
         )
 
         _append_log(task_id, f"Generated payload: {len(payload.items)} item(s). Saving to DB...")
-        run_id = _persist_recommendations(payload)
+        run_id = _persist_recommendations(payload, task_id=task_id)
         _append_log(task_id, f"Saved recommendations: run_id={run_id}.")
 
         _update_task(task_id, status="succeeded", run_id=run_id, finished_at=_utcnow())

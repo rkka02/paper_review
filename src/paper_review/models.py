@@ -151,6 +151,7 @@ class AnalysisOutput(Base):
         unique=True,
     )
     canonical_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    canonical_json_ko: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     content_md: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
@@ -293,10 +294,13 @@ class RecommendationItem(Base):
     venue: Mapped[str | None] = mapped_column(Text, nullable=True)
     authors: Mapped[list[dict] | None] = mapped_column(JSONB, nullable=True)
     abstract: Mapped[str | None] = mapped_column(Text, nullable=True)
+    abstract_ko: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
     one_liner: Mapped[str | None] = mapped_column(Text, nullable=True)
+    one_liner_ko: Mapped[str | None] = mapped_column(Text, nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    summary_ko: Mapped[str | None] = mapped_column(Text, nullable=True)
     rationale: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(

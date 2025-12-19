@@ -74,6 +74,7 @@ class PaperDetailOut(BaseModel):
     paper: PaperOut
     latest_run: AnalysisRunOut | None = None
     latest_output: dict | None = None
+    latest_output_ko: dict | None = None
     latest_content_md: str | None = None
     links: list["PaperLinkNeighborOut"] = Field(default_factory=list)
 
@@ -170,10 +171,13 @@ class RecommendationItemIn(BaseModel):
     venue: str | None = None
     authors: list[dict] | None = None
     abstract: str | None = None
+    abstract_ko: str | None = None
 
     score: float | None = None
     one_liner: str | None = None
+    one_liner_ko: str | None = None
     summary: str | None = None
+    summary_ko: str | None = None
     rationale: dict | None = None
 
 
@@ -198,10 +202,13 @@ class RecommendationItemOut(BaseModel):
     venue: str | None
     authors: list[dict] | None
     abstract: str | None
+    abstract_ko: str | None
 
     score: float | None
     one_liner: str | None
+    one_liner_ko: str | None
     summary: str | None
+    summary_ko: str | None
     rationale: dict | None
 
     created_at: datetime

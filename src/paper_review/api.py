@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 import secrets
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import delete, desc, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 from starlette.middleware.sessions import SessionMiddleware
@@ -60,8 +62,15 @@ from paper_review.schemas import (
     RecommendationExcludeOut,
 )
 from paper_review.settings import settings
+from paper_review.translation import (
+    translation_enabled,
+    translate_recommendation_texts,
+    translation_style,
+)
 
 app = FastAPI(title="paper-review", version="0.1.0")
+
+logger = logging.getLogger(__name__)
 
 _UPLOAD_PREFIX = "upload:"
 _DOI_ONLY_PREFIX = "doi_only:"
@@ -70,6 +79,17 @@ _IMPORT_JSON_PREFIX = "import_json:"
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _summarize_schema_validation_error(e: ValidationError) -> str:
+    errors = e.errors()
+    parts: list[str] = []
+    for err in errors[:10]:
+        loc = ".".join([str(x) for x in (err.get("loc") or [])])
+        msg = err.get("msg") or "invalid"
+        parts.append(f"{loc}: {msg}" if loc else msg)
+    suffix = "" if len(errors) <= 10 else f" (+{len(errors) - 10} more)"
+    return f"Schema validation failed: {'; '.join(parts)}{suffix}"
 
 
 def _maybe_mark_stale_recommender_task(db: Session, task: RecommendationTask) -> None:
@@ -621,14 +641,7 @@ async def import_paper_from_json(
     try:
         parsed = validate_analysis(payload)
     except ValidationError as e:
-        errors = e.errors()
-        parts: list[str] = []
-        for err in errors[:10]:
-            loc = ".".join([str(x) for x in (err.get("loc") or [])])
-            msg = err.get("msg") or "invalid"
-            parts.append(f"{loc}: {msg}" if loc else msg)
-        suffix = "" if len(errors) <= 10 else f" (+{len(errors) - 10} more)"
-        raise HTTPException(status_code=400, detail=f"Schema validation failed: {'; '.join(parts)}{suffix}")
+        raise HTTPException(status_code=400, detail=_summarize_schema_validation_error(e))
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"Schema validation failed: {e}")
 
@@ -681,7 +694,12 @@ async def import_paper_from_json(
     db.refresh(run)
 
     content_md = render_markdown(canonical)
-    out = AnalysisOutput(analysis_run_id=run.id, canonical_json=canonical, content_md=content_md)
+    out = AnalysisOutput(
+        analysis_run_id=run.id,
+        canonical_json=canonical,
+        canonical_json_ko=None,
+        content_md=content_md,
+    )
     db.add(out)
 
     for ev in _extract_evidence_rows(canonical):
@@ -964,6 +982,7 @@ def get_paper(paper_id: uuid.UUID, db: Session = Depends(get_db)) -> PaperDetail
         .first()
     )
     output_json: dict | None = None
+    output_json_ko: dict | None = None
     content_md: str | None = None
     if run:
         out = (
@@ -973,15 +992,153 @@ def get_paper(paper_id: uuid.UUID, db: Session = Depends(get_db)) -> PaperDetail
         )
         if out:
             output_json = out.canonical_json
+            output_json_ko = out.canonical_json_ko
             content_md = out.content_md
+        else:
+            fallback = (
+                db.execute(
+                    select(AnalysisOutput)
+                    .join(AnalysisRun, AnalysisOutput.analysis_run_id == AnalysisRun.id)
+                    .where(AnalysisRun.paper_id == paper_id)
+                    .order_by(desc(AnalysisRun.created_at))
+                    .limit(1)
+                )
+                .scalars()
+                .first()
+            )
+            if fallback:
+                output_json = fallback.canonical_json
+                output_json_ko = fallback.canonical_json_ko
+                content_md = fallback.content_md
 
     return PaperDetailOut(
         paper=PaperOut.model_validate(paper, from_attributes=True),
         latest_run=AnalysisRunOut.model_validate(run, from_attributes=True) if run else None,
         latest_output=output_json,
+        latest_output_ko=output_json_ko,
         latest_content_md=content_md,
         links=_paper_neighbors(db, paper_id),
     )
+
+
+class _AnalysisJsonSavePayload(BaseModel):
+    lang: Literal["original", "ko"]
+    canonical: dict = Field(alias="json")
+
+
+@app.put(
+    "/api/papers/{paper_id}/analysis-json",
+    response_model=dict,
+    dependencies=[Depends(_require_auth)],
+)
+def save_paper_analysis_json(
+    paper_id: uuid.UUID, payload: _AnalysisJsonSavePayload, db: Session = Depends(get_db)
+) -> dict:
+    logs: list[str] = []
+
+    paper = db.get(Paper, paper_id)
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+
+    try:
+        parsed = validate_analysis(payload.canonical)
+    except ValidationError as e:
+        msg = _summarize_schema_validation_error(e)
+        logs.append(msg)
+        return {"ok": False, "logs": logs, "error": msg}
+    except Exception as e:  # noqa: BLE001
+        msg = f"Schema validation failed: {e}"
+        logs.append(msg)
+        return {"ok": False, "logs": logs, "error": msg}
+
+    canonical = parsed.model_dump()
+    lang = payload.lang
+
+    latest_row = (
+        db.execute(
+            select(AnalysisRun, AnalysisOutput)
+            .join(AnalysisOutput, AnalysisOutput.analysis_run_id == AnalysisRun.id)
+            .where(AnalysisRun.paper_id == paper_id)
+            .order_by(desc(AnalysisRun.created_at))
+            .limit(1)
+        )
+        .first()
+    )
+
+    run: AnalysisRun | None = None
+    out: AnalysisOutput | None = None
+    if latest_row:
+        run, out = latest_row
+
+    if not out:
+        if lang == "ko":
+            msg = "No analysis JSON found. Save 원문 JSON first."
+            logs.append(msg)
+            return {"ok": False, "logs": logs, "error": msg}
+
+        now = _utcnow()
+        run = AnalysisRun(
+            paper_id=paper.id,
+            stage="manual_json",
+            status="succeeded",
+            error=None,
+            started_at=now,
+            finished_at=now,
+            timings={"manual_json": True},
+        )
+        db.add(run)
+        db.flush()
+        db.refresh(run)
+
+        out = AnalysisOutput(
+            analysis_run_id=run.id,
+            canonical_json=canonical,
+            canonical_json_ko=None,
+            content_md=render_markdown(canonical),
+        )
+        db.add(out)
+        _upsert_metadata_from_analysis(db, paper, canonical)
+        for ev in _extract_evidence_rows(canonical):
+            db.add(
+                EvidenceSnippet(
+                    paper_id=paper.id,
+                    analysis_run_id=run.id,
+                    page=ev.get("page"),
+                    quote=ev.get("quote"),
+                    why=ev.get("why"),
+                    source=ev.get("source"),
+                )
+            )
+        db.flush()
+        logs.append("Saved 원문 JSON.")
+        return {"ok": True, "logs": logs}
+
+    if lang == "original":
+        out.canonical_json = canonical
+        out.content_md = render_markdown(canonical)
+        _upsert_metadata_from_analysis(db, paper, canonical)
+        db.execute(delete(EvidenceSnippet).where(EvidenceSnippet.analysis_run_id == out.analysis_run_id))
+        for ev in _extract_evidence_rows(canonical):
+            db.add(
+                EvidenceSnippet(
+                    paper_id=paper.id,
+                    analysis_run_id=out.analysis_run_id,
+                    page=ev.get("page"),
+                    quote=ev.get("quote"),
+                    why=ev.get("why"),
+                    source=ev.get("source"),
+                )
+            )
+        db.add(out)
+        db.flush()
+        logs.append("Saved 원문 JSON.")
+        return {"ok": True, "logs": logs}
+
+    out.canonical_json_ko = canonical
+    db.add(out)
+    db.flush()
+    logs.append("Saved 한국어 JSON.")
+    return {"ok": True, "logs": logs}
 
 
 @app.patch(
@@ -997,7 +1154,8 @@ def update_paper(paper_id: uuid.UUID, payload: PaperUpdate, db: Session = Depend
     if payload.status is not None:
         paper.status = payload.status
     if payload.doi is not None:
-        paper.doi = payload.doi
+        doi = (payload.doi or "").strip()
+        paper.doi = doi or None
     if payload.title is not None:
         paper.title = payload.title
     if "folder_id" in payload.model_fields_set:
@@ -1038,14 +1196,7 @@ async def import_analysis_json(
     try:
         parsed = validate_analysis(payload)
     except ValidationError as e:
-        errors = e.errors()
-        parts: list[str] = []
-        for err in errors[:10]:
-            loc = ".".join([str(x) for x in (err.get("loc") or [])])
-            msg = err.get("msg") or "invalid"
-            parts.append(f"{loc}: {msg}" if loc else msg)
-        suffix = "" if len(errors) <= 10 else f" (+{len(errors) - 10} more)"
-        raise HTTPException(status_code=400, detail=f"Schema validation failed: {'; '.join(parts)}{suffix}")
+        raise HTTPException(status_code=400, detail=_summarize_schema_validation_error(e))
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"Schema validation failed: {e}")
 
@@ -1066,7 +1217,12 @@ async def import_analysis_json(
     db.flush()
     db.refresh(run)
 
-    out = AnalysisOutput(analysis_run_id=run.id, canonical_json=canonical, content_md=content_md)
+    out = AnalysisOutput(
+        analysis_run_id=run.id,
+        canonical_json=canonical,
+        canonical_json_ko=None,
+        content_md=content_md,
+    )
     db.add(out)
 
     for ev in _extract_evidence_rows(canonical):
@@ -1188,6 +1344,69 @@ def get_latest_recommendations(db: Session = Depends(get_db)) -> RecommendationR
         created_at=run.created_at,
         items=[RecommendationItemOut.model_validate(it, from_attributes=True) for it in items],
     )
+
+
+@app.post(
+    "/api/recommendations/{run_id}/translate",
+    response_model=dict,
+    dependencies=[Depends(_require_auth)],
+)
+def translate_recommendations(run_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+    logs: list[str] = []
+    if not translation_enabled():
+        msg = "GOOGLE_AI_API_KEY is not set."
+        logs.append(msg)
+        return {"ok": False, "logs": logs, "error": msg}
+
+    run = (
+        db.execute(
+            select(RecommendationRun)
+            .options(selectinload(RecommendationRun.items))
+            .where(RecommendationRun.id == run_id)
+        )
+        .scalars()
+        .first()
+    )
+    if not run:
+        raise HTTPException(status_code=404, detail="Recommendation run not found.")
+
+    style = translation_style()
+    items = list(run.items or [])
+    logs.append(f"Translating {len(items)} item(s) (style={style}).")
+
+    translated = 0
+    for item in items:
+        one_liner = (item.one_liner or "").strip()
+        summary = (item.summary or "").strip()
+        abstract = (item.abstract or "").strip()
+
+        if not any([one_liner, summary, abstract]):
+            item.one_liner_ko = None
+            item.summary_ko = None
+            item.abstract_ko = None
+            db.add(item)
+            continue
+
+        try:
+            out = translate_recommendation_texts(
+                one_liner=one_liner,
+                summary=summary,
+                abstract=abstract,
+            )
+            if not out:
+                continue
+            item.one_liner_ko = out.get("one_liner")
+            item.summary_ko = out.get("summary")
+            item.abstract_ko = out.get("abstract")
+            db.add(item)
+            translated += 1
+        except Exception as e:  # noqa: BLE001
+            logs.append(f"Item {item.id} failed: {type(e).__name__}: {e}")
+            continue
+
+    db.flush()
+    logs.append(f"Translated {translated} item(s).")
+    return {"ok": True, "logs": logs, "translated": translated}
 
 
 @app.post(
@@ -1340,7 +1559,30 @@ def create_recommendations(payload: RecommendationRunCreate, db: Session = Depen
     db.add(run)
     db.flush()
 
+    do_translate = translation_enabled()
     for item in payload.items:
+        abstract = (item.abstract or "").strip() or None
+        one_liner = (item.one_liner or "").strip() or None
+        summary = (item.summary or "").strip() or None
+
+        abstract_ko = (item.abstract_ko or "").strip() if item.abstract_ko is not None else None
+        one_liner_ko = (item.one_liner_ko or "").strip() if item.one_liner_ko is not None else None
+        summary_ko = (item.summary_ko or "").strip() if item.summary_ko is not None else None
+
+        if do_translate and not any([abstract_ko, one_liner_ko, summary_ko]):
+            try:
+                translated = translate_recommendation_texts(
+                    one_liner=one_liner,
+                    summary=summary,
+                    abstract=abstract,
+                )
+                if translated:
+                    one_liner_ko = translated.get("one_liner")
+                    summary_ko = translated.get("summary")
+                    abstract_ko = translated.get("abstract")
+            except Exception as e:  # noqa: BLE001
+                logger.warning("recommendation_translate_failed title=%s error=%s", item.title, e)
+
         db.add(
             RecommendationItem(
                 run_id=run.id,
@@ -1354,10 +1596,13 @@ def create_recommendations(payload: RecommendationRunCreate, db: Session = Depen
                 year=item.year,
                 venue=(item.venue or "").strip() or None,
                 authors=item.authors,
-                abstract=(item.abstract or "").strip() or None,
+                abstract=abstract,
+                abstract_ko=abstract_ko,
                 score=float(item.score) if item.score is not None else None,
-                one_liner=(item.one_liner or "").strip() or None,
-                summary=(item.summary or "").strip() or None,
+                one_liner=one_liner,
+                one_liner_ko=one_liner_ko,
+                summary=summary,
+                summary_ko=summary_ko,
                 rationale=item.rationale,
             )
         )

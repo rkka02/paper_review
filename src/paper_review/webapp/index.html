@@ -152,7 +152,17 @@
               </div>
 
               <div id="detailMeta" class="muted"></div>
-              <div id="paperControls" class="row"></div>
+              <div class="row space-between detail-controls">
+                <div id="paperControls" class="row"></div>
+                <div id="detailLangControls" class="row detail-toolbar">
+                  <div class="tabs tabs-sub lang-toggle" role="group" aria-label="JSON language">
+                    <button id="jsonLangOriginal" class="tab active" type="button">원문</button>
+                    <button id="jsonLangKorean" class="tab" type="button">한국어</button>
+                  </div>
+                  <button id="jsonSaveBtn" class="btn btn-primary btn-small" type="button">저장</button>
+                  <button id="jsonCopyBtn" class="btn btn-secondary btn-small" type="button">Copy</button>
+                </div>
+              </div>
               <div id="detailError" class="error"></div>
 
               <div id="detailTabs" class="tabs" data-tabs="details">
@@ -163,7 +173,6 @@
                 <button class="tab" type="button" data-tab="md">Markdown</button>
                 <button class="tab" type="button" data-tab="json">JSON</button>
               </div>
-
               <div id="overviewView" class="panel"></div>
 
               <div id="personasView" class="panel hidden">
@@ -179,7 +188,18 @@
               <div id="diagnosticsView" class="panel hidden"></div>
 
               <pre id="mdView" class="pre hidden"></pre>
-              <pre id="jsonView" class="pre hidden"></pre>
+              <div id="jsonPanel" class="panel hidden">
+                <textarea
+                  id="jsonEditor"
+                  class="textarea json-editor"
+                  rows="18"
+                  spellcheck="false"
+                  placeholder="여기에 JSON을 붙여넣고 저장하세요."
+                ></textarea>
+                <div id="jsonLogsPanel" class="recs-logs hidden" aria-hidden="true">
+                  <pre id="jsonLogs" class="recs-logs-pre"></pre>
+                </div>
+              </div>
             </section>
           </section>
         </section>
@@ -207,12 +227,20 @@
         <button id="recsRunBtn" class="btn btn-primary btn-small" type="button">Run</button>
         <button id="recsLogsBtn" class="btn btn-secondary btn-small" type="button">Logs</button>
         <button id="recsRefreshBtn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+        <div class="tabs tabs-sub lang-toggle" role="group" aria-label="Recommendation language">
+          <button id="recsLangOriginal" class="tab active" type="button">원문</button>
+          <button id="recsLangKorean" class="tab" type="button">한국어</button>
+        </div>
+        <button id="recsTranslateBtn" class="btn btn-secondary btn-small" type="button">번역하기</button>
         <button id="recsCloseBtn" class="btn btn-secondary btn-small" type="button">Close</button>
       </div>
       <div class="graph-canvas-wrap recs-wrap">
         <div id="recsTaskMeta" class="muted small"></div>
         <div id="recsLogsPanel" class="recs-logs hidden" aria-hidden="true">
           <pre id="recsLogs" class="recs-logs-pre"></pre>
+        </div>
+        <div id="recsTranslateLogsPanel" class="recs-logs hidden" aria-hidden="true">
+          <pre id="recsTranslateLogs" class="recs-logs-pre"></pre>
         </div>
         <div id="recsMeta" class="muted small"></div>
         <div id="recsContent" class="recs-content"></div>

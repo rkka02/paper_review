@@ -46,7 +46,14 @@ const normalizedTabs = $("normalizedTabs");
 const normalizedContent = $("normalizedContent");
 const diagnosticsView = $("diagnosticsView");
 const mdView = $("mdView");
-const jsonView = $("jsonView");
+const jsonPanel = $("jsonPanel");
+const jsonEditor = $("jsonEditor");
+const jsonCopyBtn = $("jsonCopyBtn");
+const jsonLangOriginal = $("jsonLangOriginal");
+const jsonLangKorean = $("jsonLangKorean");
+const jsonSaveBtn = $("jsonSaveBtn");
+const jsonLogsPanel = $("jsonLogsPanel");
+const jsonLogs = $("jsonLogs");
 
 const graphBtn = $("graphBtn");
 const graphOverlay = $("graphOverlay");
@@ -67,6 +74,11 @@ const recsLogsPanel = $("recsLogsPanel");
 const recsLogs = $("recsLogs");
 const recsMeta = $("recsMeta");
 const recsContent = $("recsContent");
+const recsLangOriginal = $("recsLangOriginal");
+const recsLangKorean = $("recsLangKorean");
+const recsTranslateBtn = $("recsTranslateBtn");
+const recsTranslateLogsPanel = $("recsTranslateLogsPanel");
+const recsTranslateLogs = $("recsTranslateLogs");
 
 let selectedPaperId = null;
 let pollHandle = null;
@@ -85,8 +97,13 @@ let selectedFolderId = null;
 let selectedDetailTab = "overview";
 let selectedPersonaId = null;
 let selectedNormalizedTab = "section_map";
+let selectedJsonLang = "original";
+let selectedRecsLang = "original";
 let lastDetailOutputKey = null;
 let currentDetail = null;
+let jsonDraftPaperId = null;
+let jsonDraftByLang = { original: "", ko: "" };
+let jsonDirtyByLang = { original: false, ko: false };
 let overviewCtx = null;
 let paperMenuEl = null;
 let paperMenuToken = null;
@@ -106,6 +123,191 @@ function hide(el) {
 
 function setText(el, text) {
   el.textContent = text ?? "";
+}
+
+async function copyToClipboard(text) {
+  const value = String(text || "");
+  if (!value) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const ta = document.createElement("textarea");
+  ta.value = value;
+  ta.setAttribute("readonly", "true");
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand("copy");
+  ta.remove();
+}
+
+function setLogPanel(panel, pre, logs) {
+  if (!panel || !pre) return;
+  const text = Array.isArray(logs) ? logs.join("\n").trim() : String(logs || "").trim();
+  if (!text) {
+    pre.textContent = "";
+    hide(panel);
+    panel.setAttribute("aria-hidden", "true");
+    return;
+  }
+  pre.textContent = text;
+  show(panel);
+  panel.setAttribute("aria-hidden", "false");
+}
+
+function getDetailOutputState(detail) {
+  const original = detail?.latest_output || null;
+  const translated = detail?.latest_output_ko || null;
+  const useKo = selectedJsonLang === "ko";
+  const selected = useKo ? translated : original;
+  const missing = useKo && !translated && !!original;
+  const key = selected ? JSON.stringify(selected) : "";
+  return { original, translated, selected, missing, key };
+}
+
+function currentJsonLangKey() {
+  return selectedJsonLang === "ko" ? "ko" : "original";
+}
+
+function resetJsonDrafts(paperId) {
+  jsonDraftPaperId = paperId;
+  jsonDraftByLang = { original: "", ko: "" };
+  jsonDirtyByLang = { original: false, ko: false };
+}
+
+function syncJsonEditor(detail) {
+  if (!jsonEditor) return;
+  const langKey = currentJsonLangKey();
+
+  let desired = "";
+  if (jsonDirtyByLang?.[langKey]) {
+    desired = String(jsonDraftByLang?.[langKey] || "");
+  } else if (detail) {
+    const obj = langKey === "ko" ? detail.latest_output_ko : detail.latest_output;
+    desired = obj ? JSON.stringify(obj, null, 2) : "";
+    jsonDraftByLang[langKey] = desired;
+  }
+
+  if (jsonEditor.value !== desired) jsonEditor.value = desired;
+}
+
+function renderMarkdownFromCanonical(canonical) {
+  if (!canonical || typeof canonical !== "object") return "";
+  const paper = canonical.paper || {};
+  const meta = paper && typeof paper === "object" ? paper.metadata || {} : {};
+  const title = meta.title || "(untitled)";
+  const doi = meta.doi || "";
+  const year = meta.year || "";
+  const venue = meta.venue || "";
+
+  const final = canonical.final_synthesis || {};
+  const oneLiner = final.one_liner || "";
+  const strengths = asArray(final.strengths);
+  const weaknesses = asArray(final.weaknesses);
+
+  const lines = [];
+  lines.push(`# ${title}`);
+  if (doi || year || venue) {
+    const bits = [];
+    if (year) bits.push(String(year));
+    if (venue) bits.push(String(venue));
+    if (doi) bits.push(String(doi));
+    lines.push("");
+    lines.push(bits.join(" / "));
+  }
+
+  if (oneLiner) {
+    lines.push("");
+    lines.push(`**One-liner:** ${oneLiner}`);
+  }
+
+  if (strengths.length) {
+    lines.push("");
+    lines.push("## Strengths");
+    for (const s of strengths) lines.push(`- ${s}`);
+  }
+
+  if (weaknesses.length) {
+    lines.push("");
+    lines.push("## Weaknesses");
+    for (const w of weaknesses) lines.push(`- ${w}`);
+  }
+
+  const personas = asArray(canonical.personas);
+  if (personas.length) {
+    lines.push("");
+    lines.push("## Personas");
+    for (const p of personas) {
+      const titleP = p?.title || p?.id || "persona";
+      lines.push(`### ${titleP}`);
+      for (const h of asArray(p?.highlights)) {
+        const point = h?.point;
+        if (point) lines.push(`- ${point}`);
+      }
+    }
+  }
+
+  return `${lines.join("\n").trim()}\n`;
+}
+
+function renderMarkdownView(detail, state) {
+  if (!mdView) return;
+  if (!detail) {
+    setText(mdView, "");
+    return;
+  }
+  if (selectedJsonLang === "ko") {
+    if (state.selected) {
+      setText(mdView, renderMarkdownFromCanonical(state.selected));
+    } else if (state.missing) {
+      setText(mdView, "한국어 없음");
+    } else {
+      setText(mdView, "");
+    }
+    return;
+  }
+  setText(mdView, detail.latest_content_md || "");
+}
+
+function renderDetailOutput(detail) {
+  if (!detail) {
+    if (jsonEditor) jsonEditor.value = "";
+    renderMarkdownView(null, { selected: null, missing: false });
+    return;
+  }
+  const state = getDetailOutputState(detail);
+  renderOverview(detail, state.selected, state.key, state.missing);
+  if (state.key !== lastDetailOutputKey) {
+    lastDetailOutputKey = state.key;
+    renderPersonas(state.selected, state.missing);
+    renderNormalized(state.selected, state.missing);
+    renderDiagnostics(state.selected, state.missing);
+  }
+  renderMarkdownView(detail, state);
+  syncJsonEditor(detail);
+}
+
+function setJsonLang(lang) {
+  const prevKey = currentJsonLangKey();
+  if (jsonEditor) jsonDraftByLang[prevKey] = jsonEditor.value;
+  selectedJsonLang = lang === "ko" ? "ko" : "original";
+  if (jsonLangOriginal) jsonLangOriginal.classList.toggle("active", selectedJsonLang === "original");
+  if (jsonLangKorean) jsonLangKorean.classList.toggle("active", selectedJsonLang === "ko");
+  renderDetailOutput(currentDetail);
+}
+
+function setRecsLang(lang) {
+  selectedRecsLang = lang === "ko" ? "ko" : "original";
+  if (recsLangOriginal) recsLangOriginal.classList.toggle("active", selectedRecsLang === "original");
+  if (recsLangKorean) recsLangKorean.classList.toggle("active", selectedRecsLang === "ko");
+  if (isRecsOpen()) renderRecs(latestRecs);
+}
+
+function isJsonDirty() {
+  const key = currentJsonLangKey();
+  return !!jsonDirtyByLang?.[key];
 }
 
 function folderName(folderId) {
@@ -501,7 +703,7 @@ function switchDetailTab(tab) {
     normalized: normalizedView,
     diagnostics: diagnosticsView,
     md: mdView,
-    json: jsonView,
+    json: jsonPanel || jsonEditor,
   };
   for (const [k, el] of Object.entries(views)) {
     if (!el) continue;
@@ -522,7 +724,7 @@ function initDetailTabs() {
   switchDetailTab(selectedDetailTab);
 }
 
-function renderOverview(detail, outputKey) {
+function renderOverview(detail, canonicalOut, outputKey, missingTranslation = false) {
   if (!overviewView) return;
 
   const paperOut = detail?.paper;
@@ -680,7 +882,8 @@ function renderOverview(detail, outputKey) {
                   (x.title || "").toLowerCase().localeCompare((y.title || "").toLowerCase()),
                 );
               }
-              renderOverview(currentDetail, overviewCtx.outputKey || "");
+              const state = getDetailOutputState(currentDetail);
+              renderOverview(currentDetail, state.selected, state.key, state.missing);
             }
           } catch (e) {
             toast(String(e.message || e), "error", 6500);
@@ -739,11 +942,14 @@ function renderOverview(detail, outputKey) {
   if (!overviewCtx || overviewCtx.paperId !== paperId) buildSkeleton();
   if (!overviewCtx) return;
 
-  const canonicalOut = detail.latest_output;
+  const emptyMsg = missingTranslation ? "한국어 없음" : "No analysis output yet.";
+  const missingKv = missingTranslation ? "한국어 없음" : "-";
   const canonicalPaper = canonicalOut?.paper || {};
   const canonicalMeta = canonicalPaper.metadata || {};
   const displayTitle =
-    paperOut.title || canonicalMeta.title || paperOut.doi || paperOut.drive_file_id || paperOut.id || "(untitled)";
+    selectedJsonLang === "ko"
+      ? canonicalMeta.title || paperOut.title || paperOut.doi || paperOut.drive_file_id || paperOut.id || "(untitled)"
+      : paperOut.title || canonicalMeta.title || paperOut.doi || paperOut.drive_file_id || paperOut.id || "(untitled)";
   if (overviewCtx.titleEl.textContent !== displayTitle) overviewCtx.titleEl.textContent = displayTitle;
 
   const doiValue = canonicalMeta.doi || paperOut.doi || "";
@@ -758,9 +964,13 @@ function renderOverview(detail, outputKey) {
   if (kvKey !== overviewCtx.kvKey) {
     overviewCtx.kvKey = kvKey;
     overviewCtx.kvEl.replaceChildren();
-    overviewCtx.kvEl.appendChild(kvRow("Authors", canonicalOut ? renderAuthors(canonicalMeta.authors) : "-"));
-    overviewCtx.kvEl.appendChild(kvRow("Year", canonicalOut && canonicalMeta.year ? String(canonicalMeta.year) : "-"));
-    overviewCtx.kvEl.appendChild(kvRow("Venue", canonicalOut ? canonicalMeta.venue || "-" : "-"));
+    overviewCtx.kvEl.appendChild(
+      kvRow("Authors", canonicalOut ? renderAuthors(canonicalMeta.authors) : missingKv),
+    );
+    overviewCtx.kvEl.appendChild(
+      kvRow("Year", canonicalOut && canonicalMeta.year ? String(canonicalMeta.year) : missingKv),
+    );
+    overviewCtx.kvEl.appendChild(kvRow("Venue", canonicalOut ? canonicalMeta.venue || "-" : missingKv));
     overviewCtx.kvEl.appendChild(kvRow("DOI", doiLink(doiValue)));
     overviewCtx.kvEl.appendChild(kvRow("URL", safeLink(urlValue)));
   }
@@ -773,7 +983,7 @@ function renderOverview(detail, outputKey) {
       overviewCtx.absHost.appendChild(createEl("div", { className: "section-title", text: "Abstract" }));
       overviewCtx.absHost.appendChild(createEl("div", { className: "prose", text: canonicalPaper.abstract }));
     } else if (!canonicalOut) {
-      overviewCtx.absHost.appendChild(createEl("div", { className: "muted", text: "No analysis output yet." }));
+      overviewCtx.absHost.appendChild(createEl("div", { className: "muted", text: emptyMsg }));
     }
 
     overviewCtx.finalHost.replaceChildren();
@@ -809,6 +1019,8 @@ function renderOverview(detail, outputKey) {
 
       const ev = renderEvidenceBlock(final.evidence);
       if (ev) overviewCtx.finalHost.appendChild(ev);
+    } else if (!canonicalOut) {
+      overviewCtx.finalHost.appendChild(createEl("div", { className: "muted", text: emptyMsg }));
     }
   }
 
@@ -858,7 +1070,8 @@ function renderOverview(detail, outputKey) {
           if (currentDetail && currentDetail.paper && currentDetail.paper.id === paperId && Array.isArray(currentDetail.links)) {
             currentDetail.links = currentDetail.links.filter((x) => x && x.id !== l.id);
           }
-          renderOverview(currentDetail, overviewCtx.outputKey || "");
+          const state = getDetailOutputState(currentDetail);
+          renderOverview(currentDetail, state.selected, state.key, state.missing);
         } catch (e2) {
           toast(String(e2.message || e2), "error", 6500);
         }
@@ -875,11 +1088,12 @@ function renderOverview(detail, outputKey) {
   }
 }
 
-function renderPersonas(canonical) {
+function renderPersonas(canonical, missingTranslation = false) {
   personaTabs.replaceChildren();
   personaContent.replaceChildren();
   if (!canonical) {
-    personaContent.appendChild(createEl("div", { className: "muted", text: "No analysis output yet." }));
+    const msg = missingTranslation ? "한국어 없음" : "No analysis output yet.";
+    personaContent.appendChild(createEl("div", { className: "muted", text: msg }));
     return;
   }
 
@@ -901,7 +1115,7 @@ function renderPersonas(canonical) {
     });
     btn.addEventListener("click", () => {
       selectedPersonaId = p.id;
-      renderPersonas(canonical);
+      renderPersonas(canonical, missingTranslation);
     });
     personaTabs.appendChild(btn);
   }
@@ -931,11 +1145,12 @@ function renderPersonas(canonical) {
   personaContent.appendChild(hl);
 }
 
-function renderNormalized(canonical) {
+function renderNormalized(canonical, missingTranslation = false) {
   normalizedTabs.replaceChildren();
   normalizedContent.replaceChildren();
   if (!canonical) {
-    normalizedContent.appendChild(createEl("div", { className: "muted", text: "No analysis output yet." }));
+    const msg = missingTranslation ? "한국어 없음" : "No analysis output yet.";
+    normalizedContent.appendChild(createEl("div", { className: "muted", text: msg }));
     return;
   }
 
@@ -966,7 +1181,7 @@ function renderNormalized(canonical) {
     });
     btn.addEventListener("click", () => {
       selectedNormalizedTab = t.id;
-      renderNormalized(canonical);
+      renderNormalized(canonical, missingTranslation);
     });
     normalizedTabs.appendChild(btn);
   }
@@ -1078,10 +1293,11 @@ function renderNormalized(canonical) {
   }
 }
 
-function renderDiagnostics(canonical) {
+function renderDiagnostics(canonical, missingTranslation = false) {
   diagnosticsView.replaceChildren();
   if (!canonical) {
-    diagnosticsView.appendChild(createEl("div", { className: "muted", text: "No analysis output yet." }));
+    const msg = missingTranslation ? "한국어 없음" : "No analysis output yet.";
+    diagnosticsView.appendChild(createEl("div", { className: "muted", text: msg }));
     return;
   }
   const d = canonical.diagnostics || {};
@@ -1322,6 +1538,52 @@ function renderPaperControls(paper) {
   });
 
   paperControls.appendChild(folderSelect);
+
+  /* DOI edit controls disabled for now.
+  const doiWrap = createEl("div", { className: "doi-edit" });
+  const doiField = createEl("input", {
+    attrs: { type: "text", placeholder: "DOI" },
+  });
+  doiField.value = paper.doi || "";
+  const doiSaveBtn = createEl("button", {
+    className: "btn btn-secondary btn-small",
+    text: "Save DOI",
+    attrs: { type: "button" },
+  });
+
+  const saveDoi = async () => {
+    const next = doiField.value.trim();
+    const current = paper.doi || "";
+    if (next === current) return;
+    try {
+      await api(`/api/papers/${paper.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ doi: next || null }),
+      });
+      toast("DOI updated.", "success");
+      await refreshPapers();
+      if (selectedPaperId === paper.id) await loadDetails(selectedPaperId);
+    } catch (e) {
+      toast(String(e.message || e), "error", 6500);
+    }
+  };
+
+  doiField.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      saveDoi();
+    }
+  });
+  doiSaveBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    saveDoi();
+  });
+
+  doiWrap.appendChild(doiField);
+  doiWrap.appendChild(doiSaveBtn);
+  paperControls.appendChild(doiWrap);
+  */
 }
 
 async function renamePaper(paper) {
@@ -1531,7 +1793,19 @@ function renderRecs(run) {
     const s = String(t || "").trim();
     if (!s) return "";
     if (s.length <= n) return s;
-    return `${s.slice(0, n).trim()}…`;
+    return `${s.slice(0, n).trim()}...`;
+  }
+
+  function resolveRecText(it, field) {
+    const original = String(it?.[field] || "").trim();
+    if (selectedRecsLang === "ko") {
+      const key = `${field}_ko`;
+      const translated = String(it?.[key] || "").trim();
+      if (translated) return { text: translated, missing: false };
+      if (original) return { text: "한국어 없음", missing: true };
+      return { text: "", missing: false };
+    }
+    return { text: original, missing: false };
   }
 
   for (const [key, items] of groupEntries) {
@@ -1582,23 +1856,38 @@ function renderRecs(run) {
 
       const metaEl = createEl("div", { className: "recs-meta muted", text: metaParts.join(" | ") });
 
-      const oneLinerText = String(it?.one_liner || "").trim();
-      const oneLinerEl = oneLinerText ? createEl("div", { className: "recs-oneliner", text: oneLinerText }) : null;
+      const oneLiner = resolveRecText(it, "one_liner");
+      const oneLinerEl = oneLiner.text
+        ? createEl("div", {
+            className: `recs-oneliner${oneLiner.missing ? " recs-missing" : ""}`,
+            text: oneLiner.text,
+          })
+        : null;
 
-      const summaryText = String(it?.summary || "").trim();
-      const summaryEl = summaryText ? createEl("div", { className: "recs-summary", text: summaryText }) : null;
+      const summary = resolveRecText(it, "summary");
+      const summaryEl = summary.text
+        ? createEl("div", {
+            className: `recs-summary${summary.missing ? " recs-missing" : ""}`,
+            text: summary.text,
+          })
+        : null;
 
-      const abstractText = String(it?.abstract || "").trim();
+      const abstract = resolveRecText(it, "abstract");
       const abstractMax = 420;
-      const abstractNeedsToggle = abstractText && abstractText.length > abstractMax;
+      const abstractNeedsToggle = abstract.text && !abstract.missing && abstract.text.length > abstractMax;
       let abstractExpanded = false;
-      const abstractBody = abstractText
-        ? createEl("div", { className: "recs-abstract-text", text: clipText(abstractText, abstractMax) })
+      const abstractBody = abstract.text
+        ? createEl("div", {
+            className: "recs-abstract-text",
+            text: abstractNeedsToggle ? clipText(abstract.text, abstractMax) : abstract.text,
+          })
         : null;
       const abstractBtn = abstractNeedsToggle
-        ? createEl("button", { className: "btn btn-ghost btn-small", text: "펼치기" })
+        ? createEl("button", { className: "btn btn-ghost btn-small", text: "???" })
         : null;
-      const abstractEl = abstractText ? createEl("div", { className: "recs-abstract" }) : null;
+      const abstractEl = abstract.text
+        ? createEl("div", { className: `recs-abstract${abstract.missing ? " recs-missing" : ""}` })
+        : null;
 
       if (abstractEl && abstractBody) {
         abstractEl.appendChild(abstractBody);
@@ -1606,8 +1895,8 @@ function renderRecs(run) {
           abstractBtn.addEventListener("click", (e) => {
             e.preventDefault();
             abstractExpanded = !abstractExpanded;
-            abstractBody.textContent = abstractExpanded ? abstractText : clipText(abstractText, abstractMax);
-            abstractBtn.textContent = abstractExpanded ? "접기" : "펼치기";
+            abstractBody.textContent = abstractExpanded ? abstract.text : clipText(abstract.text, abstractMax);
+            abstractBtn.textContent = abstractExpanded ? "??" : "???";
           });
           const actions = createEl("div", { className: "recs-abstract-actions" });
           actions.appendChild(abstractBtn);
@@ -1780,6 +2069,40 @@ async function refreshRecommendations({ silent = false } = {}) {
   }
 }
 
+async function translateRecommendations() {
+  const runId = latestRecs?.id;
+  if (!runId) {
+    toast("No recommendations to translate.", "error");
+    return;
+  }
+  if (recsTranslateBtn) {
+    recsTranslateBtn.disabled = true;
+    recsTranslateBtn.textContent = "Translating...";
+  }
+  setLogPanel(recsTranslateLogsPanel, recsTranslateLogs, ["Translating recommendations..."]);
+  try {
+    const res = await api(`/api/recommendations/${runId}/translate`, { method: "POST" });
+    const logs = res && Array.isArray(res.logs) ? res.logs : [];
+    setLogPanel(recsTranslateLogsPanel, recsTranslateLogs, logs);
+    if (res && res.ok === false) {
+      toast(res.error || "Translation failed.", "error", 6500);
+      return;
+    }
+    const count = typeof res?.translated === "number" ? res.translated : null;
+    toast(count ? `Translated ${count} item(s).` : "Translated.", "success");
+    await refreshRecommendations({ silent: true });
+    if (isRecsOpen()) renderRecs(latestRecs);
+  } catch (e) {
+    setLogPanel(recsTranslateLogsPanel, recsTranslateLogs, [`Error: ${e.message || e}`]);
+    toast(String(e.message || e), "error", 6500);
+  } finally {
+    if (recsTranslateBtn) {
+      recsTranslateBtn.disabled = false;
+      recsTranslateBtn.textContent = "번역하기";
+    }
+  }
+}
+
 async function excludeRecommendation(itemId) {
   const id = String(itemId || "").trim();
   if (!id) return;
@@ -1812,6 +2135,7 @@ async function openRecs() {
   if (recsTaskMeta) recsTaskMeta.textContent = "";
   if (recsLogs) recsLogs.textContent = "";
   setRecsLogsVisible(false);
+  setLogPanel(recsTranslateLogsPanel, recsTranslateLogs, null);
   await refreshRecsTask({ silent: true });
   await refreshRecommendations({ silent: true });
   renderRecs(latestRecs);
@@ -2669,11 +2993,14 @@ function clearStructuredViews() {
   normalizedTabs.replaceChildren();
   normalizedContent.replaceChildren();
   diagnosticsView.replaceChildren();
+  if (jsonEditor) jsonEditor.value = "";
+  setLogPanel(jsonLogsPanel, jsonLogs, null);
   overviewCtx = null;
 }
 
 function applyDetailPayload(d, paperId) {
   currentDetail = d;
+  if (jsonDraftPaperId !== paperId) resetJsonDrafts(paperId);
   const run = d.latest_run;
   const runStatus = run?.status || "-";
   const title = d.paper?.title || d.paper?.doi || "";
@@ -2681,7 +3008,6 @@ function applyDetailPayload(d, paperId) {
   setText(detailMeta, `${head}paper_id=${paperId}  •  run=${runStatus}`);
   renderPaperControls(d.paper);
   setText(detailError, run?.error || "");
-  setText(mdView, d.latest_content_md || "");
 
   const busy = runStatus === "queued" || runStatus === "running";
   if (analyzeBtn && selectedPaperId === paperId) {
@@ -2689,15 +3015,7 @@ function applyDetailPayload(d, paperId) {
     analyzeBtn.disabled = busy;
   }
 
-  const outKey = d.latest_output ? JSON.stringify(d.latest_output) : "";
-  renderOverview(d, outKey);
-  if (outKey !== lastDetailOutputKey) {
-    lastDetailOutputKey = outKey;
-    setText(jsonView, d.latest_output ? JSON.stringify(d.latest_output, null, 2) : "");
-    renderPersonas(d.latest_output);
-    renderNormalized(d.latest_output);
-    renderDiagnostics(d.latest_output);
-  }
+  renderDetailOutput(d);
 
   return runStatus;
 }
@@ -2706,12 +3024,15 @@ async function loadDetails(paperId) {
   stopPolling();
   setText(detailError, "");
   setText(mdView, "");
-  setText(jsonView, "");
+  if (jsonEditor) jsonEditor.value = "";
+  setLogPanel(jsonLogsPanel, jsonLogs, null);
   clearStructuredViews();
   if (analyzeBtn) analyzeBtn.disabled = !paperId;
   lastDetailOutputKey = null;
 
   if (!paperId) {
+    currentDetail = null;
+    resetJsonDrafts(null);
     setText(detailMeta, "");
     if (paperControls) paperControls.replaceChildren();
     if (analyzeBtn) analyzeBtn.textContent = "Analyze";
@@ -2721,6 +3042,72 @@ async function loadDetails(paperId) {
 
   const d = await api(`/api/papers/${paperId}`);
   applyDetailPayload(d, paperId);
+}
+
+async function saveCurrentJson() {
+  const paperId = currentDetail?.paper?.id;
+  if (!paperId) {
+    toast("Select a paper first.", "error");
+    return;
+  }
+  const langKey = currentJsonLangKey();
+  switchDetailTab("json");
+
+  const raw = (jsonEditor?.value || "").trim();
+  if (!raw) {
+    setLogPanel(jsonLogsPanel, jsonLogs, ["JSON is empty."]);
+    toast("JSON is empty.", "error");
+    return;
+  }
+
+  let parsed = null;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    setLogPanel(jsonLogsPanel, jsonLogs, [`Invalid JSON: ${e.message || e}`]);
+    toast("Invalid JSON.", "error", 6500);
+    return;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    setLogPanel(jsonLogsPanel, jsonLogs, ["JSON must be an object."]);
+    toast("JSON must be an object.", "error");
+    return;
+  }
+
+  if (jsonSaveBtn) {
+    jsonSaveBtn.disabled = true;
+    jsonSaveBtn.textContent = "Saving...";
+  }
+  setLogPanel(jsonLogsPanel, jsonLogs, [`Saving ${langKey} JSON...`]);
+
+  try {
+    const res = await api(`/api/papers/${paperId}/analysis-json`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lang: langKey, json: parsed }),
+    });
+    const logs = res && Array.isArray(res.logs) ? res.logs : [];
+    if (res && res.ok === false) {
+      setLogPanel(jsonLogsPanel, jsonLogs, logs.length ? logs : [res.error || "Save failed."]);
+      toast(res.error || "Save failed.", "error", 6500);
+      return;
+    }
+
+    jsonDirtyByLang[langKey] = false;
+    jsonDraftByLang[langKey] = JSON.stringify(parsed, null, 2);
+
+    toast("Saved.", "success");
+    await loadDetails(paperId);
+    setLogPanel(jsonLogsPanel, jsonLogs, logs);
+  } catch (e) {
+    setLogPanel(jsonLogsPanel, jsonLogs, [`Error: ${e.message || e}`]);
+    toast(String(e.message || e), "error", 6500);
+  } finally {
+    if (jsonSaveBtn) {
+      jsonSaveBtn.disabled = false;
+      jsonSaveBtn.textContent = "저장";
+    }
+  }
 }
 
 async function startPolling(paperId) {
@@ -2849,6 +3236,8 @@ async function createPaper() {
 async function main() {
   initTheme();
   initDetailTabs();
+  setJsonLang(selectedJsonLang);
+  setRecsLang(selectedRecsLang);
   if (themeToggle) {
     themeToggle.addEventListener("click", () => {
       setTheme(currentTheme() === "dark" ? "light" : "dark");
@@ -2868,6 +3257,9 @@ async function main() {
   if (recsRunBtn) recsRunBtn.addEventListener("click", startRecsTask);
   if (recsLogsBtn) recsLogsBtn.addEventListener("click", toggleRecsLogs);
   if (recsRefreshBtn) recsRefreshBtn.addEventListener("click", () => refreshRecommendations());
+  if (recsLangOriginal) recsLangOriginal.addEventListener("click", () => setRecsLang("original"));
+  if (recsLangKorean) recsLangKorean.addEventListener("click", () => setRecsLang("ko"));
+  if (recsTranslateBtn) recsTranslateBtn.addEventListener("click", translateRecommendations);
   if (graphBtn) graphBtn.addEventListener("click", openGraph);
   if (graphCloseBtn) graphCloseBtn.addEventListener("click", closeGraph);
   if (graphSearch) {
@@ -2886,6 +3278,32 @@ async function main() {
     analysisJsonClearBtn.addEventListener("click", () => {
       if (analysisJsonText) analysisJsonText.value = "";
       toast("Cleared.", "info");
+    });
+  }
+
+  if (jsonLangOriginal) jsonLangOriginal.addEventListener("click", () => setJsonLang("original"));
+  if (jsonLangKorean) jsonLangKorean.addEventListener("click", () => setJsonLang("ko"));
+  if (jsonEditor) {
+    jsonEditor.addEventListener("input", () => {
+      const key = currentJsonLangKey();
+      jsonDraftByLang[key] = jsonEditor.value;
+      jsonDirtyByLang[key] = true;
+    });
+  }
+  if (jsonSaveBtn) {
+    jsonSaveBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      saveCurrentJson();
+    });
+  }
+  if (jsonCopyBtn) {
+    jsonCopyBtn.addEventListener("click", async () => {
+      try {
+        await copyToClipboard(jsonEditor ? jsonEditor.value : "");
+        toast("Copied.", "success");
+      } catch (e) {
+        toast(String(e.message || e), "error", 6500);
+      }
     });
   }
 

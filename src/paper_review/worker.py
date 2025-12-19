@@ -377,6 +377,7 @@ def _process_job(job: Job) -> None:
             out = AnalysisOutput(
                 analysis_run_id=run.id,
                 canonical_json=canonical,
+                canonical_json_ko=None,
                 content_md=content_md,
             )
             db.add(out)

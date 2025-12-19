@@ -790,6 +790,57 @@ html[data-theme="dark"] .tab.active {
   padding: 6px 9px;
 }
 
+.lang-toggle {
+  margin-top: 0;
+}
+
+.detail-controls {
+  margin-top: 6px;
+}
+
+.detail-toolbar {
+  gap: 8px;
+}
+
+.detail-toolbar .tabs {
+  margin-top: 0;
+}
+
+.json-editor {
+  margin-top: 0;
+  min-height: 240px;
+}
+
+.json-toolbar {
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+
+.json-toolbar .tabs {
+  margin-top: 0;
+}
+
+.doi-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.doi-edit input[type="text"] {
+  min-width: 240px;
+}
+
+@media (max-width: 700px) {
+  .doi-edit {
+    width: 100%;
+  }
+
+  .doi-edit input[type="text"] {
+    min-width: 0;
+    flex: 1;
+  }
+}
+
 .panel {
   margin-top: 10px;
 }
@@ -1628,6 +1679,11 @@ html[data-theme="dark"] .recs-oneliner {
   background: rgba(16, 185, 129, 0.08);
   font-weight: 650;
   white-space: pre-wrap;
+}
+
+.recs-missing {
+  color: var(--muted);
+  font-style: italic;
 }
 
 .recs-summary::before {
