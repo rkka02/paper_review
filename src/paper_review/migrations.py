@@ -246,6 +246,12 @@ def apply_migrations(engine: Engine) -> None:
         "create index if not exists discord_debate_turns_created_at_idx on discord_debate_turns(created_at);",
     ]
 
-    with engine.begin() as conn:
-        for stmt in statements:
-            conn.exec_driver_sql(stmt)
+    # Autocommit DDL and serialize with an advisory lock to reduce deadlocks.
+    lock_key = 732104
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        conn.exec_driver_sql(f"select pg_advisory_lock({lock_key});")
+        try:
+            for stmt in statements:
+                conn.exec_driver_sql(stmt)
+        finally:
+            conn.exec_driver_sql(f"select pg_advisory_unlock({lock_key});")
