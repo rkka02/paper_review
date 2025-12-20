@@ -22,7 +22,6 @@ from paper_review.analysis_output import validate_analysis
 from paper_review.db import db_session, init_db
 from paper_review.drive import (
     delete_drive_file,
-    get_drive_file_metadata,
     open_drive_file_stream,
     resolve_drive_upload_folder_id,
     upload_drive_file,
@@ -984,11 +983,10 @@ async def upload_paper_pdf(
     return PaperOut.model_validate(paper, from_attributes=True)
 
 
-@app.post("/api/papers/{paper_id}/pdf", response_model=dict, dependencies=[Depends(_require_auth)])
+@app.post("/api/papers/{paper_id}/pdf", response_model=PaperOut, dependencies=[Depends(_require_auth)])
 async def replace_paper_pdf(
     paper_id: uuid.UUID, request: Request, db: Session = Depends(get_db)
-) -> dict:
-    logs: list[str] = []
+) -> PaperOut:
     paper = db.get(Paper, paper_id)
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
@@ -998,8 +996,6 @@ async def replace_paper_pdf(
         raise HTTPException(status_code=415, detail="Upload must be application/pdf.")
 
     backend = settings.upload_backend.strip().lower()
-    logs.append(f"upload_backend={backend}")
-    logs.append(f"upload_dir={settings.upload_dir}")
 
     max_bytes = int(settings.max_pdf_mb) * 1024 * 1024
     upload_dir = settings.upload_dir
@@ -1015,7 +1011,6 @@ async def replace_paper_pdf(
                     continue
                 size += len(chunk)
                 if size > max_bytes:
-                    logs.append(f"received_bytes={size} (too large)")
                     raise HTTPException(
                         status_code=413, detail=f"PDF too large (>{settings.max_pdf_mb} MB)."
                     )
@@ -1028,11 +1023,7 @@ async def replace_paper_pdf(
             pass
         raise
 
-    logs.append(f"received_bytes={size}")
-    logs.append(f"received_sha256={hasher.hexdigest()}")
-
     old_drive_file_id = paper.drive_file_id
-    logs.append(f"old_drive_file_id={old_drive_file_id}")
 
     try:
         if backend == "drive":
@@ -1044,7 +1035,6 @@ async def replace_paper_pdf(
                     filename = f"{safe}.pdf"
 
             parent_folder_id = resolve_drive_upload_folder_id()
-            logs.append(f"drive_parent_folder_id={parent_folder_id or ''}")
             try:
                 drive_file_id = upload_drive_file(
                     tmp_path,
@@ -1052,32 +1042,12 @@ async def replace_paper_pdf(
                     parent_folder_id=parent_folder_id,
                 )
             except Exception as e:  # noqa: BLE001
-                msg = str(e)
-                logs.append(f"drive_upload_failed={msg}")
-                return {"ok": False, "logs": logs, "error": msg}
+                raise HTTPException(status_code=502, detail=str(e)) from e
             paper.drive_file_id = drive_file_id
-            logs.append(f"drive_upload_ok_file_id={drive_file_id}")
-            try:
-                meta = get_drive_file_metadata(
-                    drive_file_id, fields="id,name,parents,webViewLink,trashed,mimeType,size"
-                )
-                logs.append(f"drive_verify_name={meta.get('name') or ''}")
-                logs.append(f"drive_verify_webViewLink={meta.get('webViewLink') or ''}")
-                parents = meta.get("parents")
-                if isinstance(parents, list):
-                    logs.append(f"drive_verify_parents={','.join([str(p) for p in parents])}")
-                    if parent_folder_id:
-                        logs.append(f"drive_verify_parent_match={parent_folder_id in parents}")
-                logs.append(f"drive_verify_trashed={bool(meta.get('trashed'))}")
-                logs.append(f"drive_verify_mimeType={meta.get('mimeType') or ''}")
-                logs.append(f"drive_verify_size={meta.get('size') or ''}")
-            except Exception as e:  # noqa: BLE001
-                logs.append(f"drive_verify_failed={e}")
         else:
             final_path = upload_dir / f"{paper_id}.pdf"
             tmp_path.replace(final_path)
             paper.drive_file_id = f"{_UPLOAD_PREFIX}{paper_id}"
-            logs.append(f"local_saved_path={final_path}")
     finally:
         if backend == "drive":
             try:
@@ -1091,26 +1061,22 @@ async def replace_paper_pdf(
     db.add(paper)
     db.flush()
     db.refresh(paper)
-    logs.append(f"new_drive_file_id={paper.drive_file_id}")
 
     # Best-effort cleanup of the previous PDF (if any).
     try:
         if old_drive_file_id.startswith(_UPLOAD_PREFIX) and backend == "drive":
             (settings.upload_dir / f"{paper_id}.pdf").unlink(missing_ok=True)
             (settings.upload_dir / f"{paper_id}.pdf.part").unlink(missing_ok=True)
-            logs.append("cleanup_local_old=ok")
         elif not (
             old_drive_file_id.startswith(_UPLOAD_PREFIX)
             or old_drive_file_id.startswith(_DOI_ONLY_PREFIX)
             or old_drive_file_id.startswith(_IMPORT_JSON_PREFIX)
         ) and old_drive_file_id != paper.drive_file_id:
             delete_drive_file(old_drive_file_id)
-            logs.append(f"cleanup_drive_old=deleted file_id={old_drive_file_id}")
     except Exception as e:  # noqa: BLE001
         logger.warning("pdf_replace_cleanup_failed paper_id=%s error=%s", paper_id, e)
-        logs.append(f"cleanup_failed={e}")
 
-    return {"ok": True, "logs": logs, "paper": PaperOut.model_validate(paper, from_attributes=True)}
+    return PaperOut.model_validate(paper, from_attributes=True)
 
 
 @app.get("/api/papers/{paper_id}/pdf", dependencies=[Depends(_require_auth)])
