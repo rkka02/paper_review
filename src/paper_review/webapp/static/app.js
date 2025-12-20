@@ -25,6 +25,9 @@ const createStatus = $("createStatus");
 const refreshBtn = $("refreshBtn");
 const newFolderBtn = $("newFolderBtn");
 const paperSearch = $("paperSearch");
+const paperStatusAll = $("paperStatusAll");
+const paperStatusUnread = $("paperStatusUnread");
+const paperStatusRead = $("paperStatusRead");
 const paperCount = $("paperCount");
 const paperPrevBtn = $("paperPrevBtn");
 const paperNextBtn = $("paperNextBtn");
@@ -94,6 +97,7 @@ let folders = [];
 let folderById = new Map();
 let selectedFolderMode = "all"; // all | unfiled | folder
 let selectedFolderId = null;
+let selectedPaperStatusFilter = "all"; // all | unread | read
 let selectedDetailTab = "overview";
 let selectedPersonaId = null;
 let selectedNormalizedTab = "section_map";
@@ -328,6 +332,14 @@ function setFolderSelection(mode, folderId = null) {
   applyPapersFilter();
 }
 
+function setPaperStatusFilter(mode) {
+  selectedPaperStatusFilter = mode === "read" ? "read" : mode === "unread" ? "unread" : "all";
+  if (paperStatusAll) paperStatusAll.classList.toggle("active", selectedPaperStatusFilter === "all");
+  if (paperStatusUnread) paperStatusUnread.classList.toggle("active", selectedPaperStatusFilter === "unread");
+  if (paperStatusRead) paperStatusRead.classList.toggle("active", selectedPaperStatusFilter === "read");
+  applyPapersFilter();
+}
+
 function currentTheme() {
   return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
 }
@@ -432,6 +444,10 @@ function normalizeTitle(p) {
 function paperLabel(paper) {
   if (!paper) return "(untitled)";
   return paper.title || paper.doi || paper.drive_file_id || paper.id || "(untitled)";
+}
+
+function paperReadLabel(status) {
+  return status === "done" ? "읽음" : "아직 안 읽음";
 }
 
 function paperMetaLine(paper) {
@@ -1497,6 +1513,18 @@ async function setPaperFolder(paperId, folderId) {
   if (selectedPaperId === paperId) await loadDetails(selectedPaperId);
 }
 
+async function setPaperReadStatus(paperId, status) {
+  const next = status === "done" ? "done" : "to_read";
+  await api(`/api/papers/${paperId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status: next }),
+  });
+  toast(next === "done" ? "읽음으로 표시함." : "아직 안 읽음으로 표시함.", "success");
+  await refreshPapers();
+  if (selectedPaperId === paperId) await loadDetails(selectedPaperId);
+}
+
 async function movePaperPrompt(paper) {
   const current = folderName(paper.folder_id) || "Unfiled";
   const rows = folderTreeRows();
@@ -1538,6 +1566,30 @@ function renderPaperControls(paper) {
   });
 
   paperControls.appendChild(folderSelect);
+
+  const statusSelect = createEl("select", { className: "select", attrs: { "aria-label": "읽기 상태" } });
+  statusSelect.appendChild(createEl("option", { text: "아직 안 읽음", attrs: { value: "to_read" } }));
+  statusSelect.appendChild(createEl("option", { text: "읽음", attrs: { value: "done" } }));
+  statusSelect.value = paper.status === "done" ? "done" : "to_read";
+
+  let prevStatus = statusSelect.value;
+  statusSelect.addEventListener("change", async (e) => {
+    e.preventDefault();
+    const next = statusSelect.value;
+    if (next === prevStatus) return;
+    statusSelect.disabled = true;
+    try {
+      await setPaperReadStatus(paper.id, next);
+      prevStatus = next;
+    } catch (err) {
+      statusSelect.value = prevStatus;
+      toast(String(err?.message || err), "error", 6500);
+    } finally {
+      statusSelect.disabled = false;
+    }
+  });
+
+  paperControls.appendChild(statusSelect);
 
   /* DOI edit controls disabled for now.
   const doiWrap = createEl("div", { className: "doi-edit" });
@@ -1653,7 +1705,7 @@ function renderPapers(items) {
     const p = item.paper || {};
     const metaParts = [];
     if (p.doi) metaParts.push(`doi: ${p.doi}`);
-    metaParts.push(`status: ${p.status || "-"}`);
+    metaParts.push(`읽기: ${paperReadLabel(p.status)}`);
     if (selectedFolderMode === "all") {
       const fn = folderName(p.folder_id);
       metaParts.push(fn ? `folder: ${fn}` : "unfiled");
@@ -2890,7 +2942,7 @@ async function logout() {
 function paperFilterKey(q) {
   const folderKey =
     selectedFolderMode === "folder" && selectedFolderId ? `folder:${selectedFolderId}` : selectedFolderMode;
-  return `${folderKey}|${q || ""}`;
+  return `${folderKey}|${selectedPaperStatusFilter}|${q || ""}`;
 }
 
 function renderPaperPager(startIndex, endIndexExclusive, total) {
@@ -2940,12 +2992,19 @@ function applyPapersFilter() {
     lastPaperFilterKey = key;
   }
 
-  const scoped =
+  const folderScoped =
     selectedFolderMode === "unfiled"
       ? paperSummaries.filter((x) => !x.paper?.folder_id)
       : selectedFolderMode === "folder" && selectedFolderId
         ? paperSummaries.filter((x) => x.paper?.folder_id === selectedFolderId)
         : paperSummaries;
+
+  const scoped =
+    selectedPaperStatusFilter === "read"
+      ? folderScoped.filter((x) => (x.paper?.status || "to_read") === "done")
+      : selectedPaperStatusFilter === "unread"
+        ? folderScoped.filter((x) => (x.paper?.status || "to_read") !== "done")
+        : folderScoped;
 
   const filtered = !q
     ? scoped
@@ -2972,8 +3031,14 @@ function applyPapersFilter() {
         : selectedFolderMode === "unfiled"
           ? "Unfiled"
           : folderName(selectedFolderId) || "Folder";
+    const statusLabel =
+      selectedPaperStatusFilter === "read"
+        ? "읽음"
+        : selectedPaperStatusFilter === "unread"
+          ? "아직 안 읽음"
+          : null;
     const text = q ? `${filtered.length} / ${scoped.length}` : `${scoped.length}`;
-    paperCount.textContent = `${text} papers • ${scopeLabel}`;
+    paperCount.textContent = `${text} papers • ${scopeLabel}${statusLabel ? ` • ${statusLabel}` : ""}`;
   }
   renderPapersPaged(filtered);
 }
@@ -3316,6 +3381,9 @@ async function main() {
     await refreshRecommendations({ silent: true });
   });
   if (paperSearch) paperSearch.addEventListener("input", applyPapersFilter);
+  if (paperStatusAll) paperStatusAll.addEventListener("click", () => setPaperStatusFilter("all"));
+  if (paperStatusUnread) paperStatusUnread.addEventListener("click", () => setPaperStatusFilter("unread"));
+  if (paperStatusRead) paperStatusRead.addEventListener("click", () => setPaperStatusFilter("read"));
   if (paperPrevBtn) {
     paperPrevBtn.addEventListener("click", () => {
       paperPageIndex -= 1;
