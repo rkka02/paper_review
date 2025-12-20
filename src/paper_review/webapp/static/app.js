@@ -60,6 +60,8 @@ const jsonSaveBtn = $("jsonSaveBtn");
 const jsonLogsPanel = $("jsonLogsPanel");
 const jsonLogs = $("jsonLogs");
 const detailTabsMoreBtn = $("detailTabsMoreBtn");
+const pdfLogsPanel = $("pdfLogsPanel");
+const pdfLogs = $("pdfLogs");
 const newPaperDrawer = $("newPaperDrawer");
 const newPaperDrawerPanel = $("newPaperDrawerPanel");
 const newPaperCloseBtn = $("newPaperCloseBtn");
@@ -1691,16 +1693,24 @@ function renderPaperControls(paper) {
     pdfBtn.disabled = true;
     const prevText = pdfBtn.textContent;
     pdfBtn.textContent = "업로드중...";
+    setLogPanel(pdfLogsPanel, pdfLogs, ["Uploading PDF..."]);
     try {
-      await api(`/api/papers/${paper.id}/pdf`, {
+      const res = await api(`/api/papers/${paper.id}/pdf`, {
         method: "POST",
         headers: { "Content-Type": "application/pdf" },
         body: file,
       });
+      const logs = res && Array.isArray(res.logs) ? res.logs : null;
+      setLogPanel(pdfLogsPanel, pdfLogs, logs);
+      if (res && res.ok === false) {
+        toast(String(res.error || "PDF upload failed."), "error", 6500);
+        return;
+      }
       toast("PDF 업로드됨.", "success");
       await refreshPapers();
       if (selectedPaperId === paper.id) await loadDetails(selectedPaperId);
     } catch (err) {
+      setLogPanel(pdfLogsPanel, pdfLogs, [`Error: ${String(err?.message || err)}`]);
       toast(String(err?.message || err), "error", 6500);
     } finally {
       pdfBtn.disabled = false;
