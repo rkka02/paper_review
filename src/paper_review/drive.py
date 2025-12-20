@@ -152,6 +152,25 @@ def delete_drive_file(file_id: str) -> None:
         _raise_drive_http_error(r, context=f"Drive delete failed for file_id={file_id}")
 
 
+def get_drive_file_metadata(
+    file_id: str,
+    *,
+    fields: str = "id,name,parents,driveId,webViewLink,webContentLink,trashed,size,mimeType",
+) -> dict[str, object]:
+    token = _get_drive_access_token()
+    url = f"https://www.googleapis.com/drive/v3/files/{file_id}"
+    params = {"supportsAllDrives": "true", "fields": fields}
+    headers = {"Authorization": f"Bearer {token}"}
+
+    with httpx.Client(timeout=120.0) as client:
+        r = client.get(url, params=params, headers=headers)
+        _raise_drive_http_error(r, context=f"Drive get metadata failed for file_id={file_id}")
+        data = r.json() if r.content else {}
+        if not isinstance(data, dict):
+            raise RuntimeError("Drive get metadata failed: invalid response.")
+        return data
+
+
 def open_drive_file_stream(file_id: str) -> tuple[httpx.Response, Callable[[], None]]:
     """
     Open a streaming HTTP response for a Drive file (alt=media).
