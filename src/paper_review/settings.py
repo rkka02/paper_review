@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
@@ -141,3 +142,58 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+_SETTINGS_LOCK = threading.Lock()
+_SETTINGS_ENV_MTIME: float | None = None
+
+
+def _get_env_files_mtime() -> float | None:
+    mtimes: list[float] = []
+    for env_file in _ENV_FILES:
+        p = Path(env_file)
+        try:
+            if p.exists():
+                mtimes.append(p.stat().st_mtime)
+        except OSError:
+            continue
+    return max(mtimes) if mtimes else None
+
+
+def _apply_settings_in_place(new_settings: Settings) -> None:
+    for field_name in new_settings.model_fields:
+        setattr(settings, field_name, getattr(new_settings, field_name))
+
+
+def maybe_reload_settings() -> bool:
+    """
+    Reload `.env` settings if the env file changed since last check.
+
+    Returns True when a reload succeeded and was applied.
+    """
+    global _SETTINGS_ENV_MTIME
+
+    current_mtime = _get_env_files_mtime()
+    if current_mtime is None:
+        return False
+    if _SETTINGS_ENV_MTIME is not None and current_mtime <= _SETTINGS_ENV_MTIME:
+        return False
+
+    with _SETTINGS_LOCK:
+        current_mtime = _get_env_files_mtime()
+        if current_mtime is None:
+            return False
+        if _SETTINGS_ENV_MTIME is not None and current_mtime <= _SETTINGS_ENV_MTIME:
+            return False
+
+        try:
+            new_settings = Settings()
+        except Exception:
+            _SETTINGS_ENV_MTIME = current_mtime
+            return False
+
+        _apply_settings_in_place(new_settings)
+        _SETTINGS_ENV_MTIME = current_mtime
+        return True
+
+
+_SETTINGS_ENV_MTIME = _get_env_files_mtime()

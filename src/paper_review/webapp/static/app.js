@@ -1673,6 +1673,8 @@ function renderPaperControls(paper) {
     paper.drive_file_id &&
     !paper.drive_file_id.startsWith("doi_only:") &&
     !paper.drive_file_id.startsWith("import_json:");
+  const isLocalPdf = hasPdf && paper.drive_file_id.startsWith("upload:");
+  const isDrivePdf = hasPdf && !isLocalPdf;
 
   const pdfBtn = createEl("button", {
     className: "btn btn-secondary btn-small",
@@ -1706,7 +1708,9 @@ function renderPaperControls(paper) {
         toast(String(res.error || "PDF upload failed."), "error", 6500);
         return;
       }
-      toast("PDF 업로드됨.", "success");
+      const updated = res && res.paper ? res.paper : null;
+      const dfid = updated && updated.drive_file_id ? String(updated.drive_file_id) : "";
+      toast(dfid.startsWith("upload:") ? "PDF 서버에 저장됨." : "PDF Google Drive에 저장됨.", "success");
       await refreshPapers();
       if (selectedPaperId === paper.id) await loadDetails(selectedPaperId);
     } catch (err) {
@@ -1738,6 +1742,17 @@ function renderPaperControls(paper) {
           window.open(`/api/papers/${paper.id}/pdf`, "_blank", "noopener");
         },
       },
+      ...(isDrivePdf
+        ? [
+            {
+              label: "Drive에서 열기",
+              onClick: async () => {
+                const id = paper.drive_file_id;
+                window.open(`https://drive.google.com/file/d/${id}/view`, "_blank", "noopener");
+              },
+            },
+          ]
+        : []),
       {
         label: hasPdf ? "교체 업로드..." : "업로드...",
         onClick: async () => {

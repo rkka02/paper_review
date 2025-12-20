@@ -22,6 +22,7 @@ from paper_review.analysis_output import validate_analysis
 from paper_review.db import db_session, init_db
 from paper_review.drive import (
     delete_drive_file,
+    get_drive_file_metadata,
     open_drive_file_stream,
     resolve_drive_upload_folder_id,
     upload_drive_file,
@@ -67,7 +68,7 @@ from paper_review.schemas import (
     RecommendationExcludeCreate,
     RecommendationExcludeOut,
 )
-from paper_review.settings import settings
+from paper_review.settings import maybe_reload_settings, settings
 from paper_review.translation import (
     translation_enabled,
     translate_recommendation_texts,
@@ -81,6 +82,15 @@ logger = logging.getLogger(__name__)
 _UPLOAD_PREFIX = "upload:"
 _DOI_ONLY_PREFIX = "doi_only:"
 _IMPORT_JSON_PREFIX = "import_json:"
+
+
+@app.middleware("http")
+async def _reload_settings_middleware(request: Request, call_next):  # noqa: ARG001
+    try:
+        maybe_reload_settings()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("settings_reload_failed error=%s", e)
+    return await call_next(request)
 
 
 def _utcnow() -> datetime:
@@ -1047,6 +1057,22 @@ async def replace_paper_pdf(
                 return {"ok": False, "logs": logs, "error": msg}
             paper.drive_file_id = drive_file_id
             logs.append(f"drive_upload_ok_file_id={drive_file_id}")
+            try:
+                meta = get_drive_file_metadata(
+                    drive_file_id, fields="id,name,parents,webViewLink,trashed,mimeType,size"
+                )
+                logs.append(f"drive_verify_name={meta.get('name') or ''}")
+                logs.append(f"drive_verify_webViewLink={meta.get('webViewLink') or ''}")
+                parents = meta.get("parents")
+                if isinstance(parents, list):
+                    logs.append(f"drive_verify_parents={','.join([str(p) for p in parents])}")
+                    if parent_folder_id:
+                        logs.append(f"drive_verify_parent_match={parent_folder_id in parents}")
+                logs.append(f"drive_verify_trashed={bool(meta.get('trashed'))}")
+                logs.append(f"drive_verify_mimeType={meta.get('mimeType') or ''}")
+                logs.append(f"drive_verify_size={meta.get('size') or ''}")
+            except Exception as e:  # noqa: BLE001
+                logs.append(f"drive_verify_failed={e}")
         else:
             final_path = upload_dir / f"{paper_id}.pdf"
             tmp_path.replace(final_path)
