@@ -76,7 +76,9 @@
 - 업로드 테스트(선택):
   - `UPLOAD_BACKEND=drive` 권장(서비스 분리 시 로컬 디스크는 공유되지 않음)
   - `GOOGLE_DRIVE_SCOPE=https://www.googleapis.com/auth/drive`
-  - (선택) `GOOGLE_DRIVE_UPLOAD_FOLDER_ID`
+  - 업로드 폴더(선택):
+    - `GOOGLE_DRIVE_UPLOAD_FOLDER_ID` (폴더 id를 직접 지정)
+    - 또는 `GOOGLE_DRIVE_UPLOAD_FOLDER_NAME` (기본값: `Paper-Review`, 없으면 자동 생성)
   - (로컬 저장을 쓰면) `UPLOAD_DIR` (Cloud 환경이면 `/tmp/uploads` 같은 경로 권장)
 
 4) 동작 확인

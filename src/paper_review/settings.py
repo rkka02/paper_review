@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     google_drive_scope: str = Field(
         default="https://www.googleapis.com/auth/drive.readonly", alias="GOOGLE_DRIVE_SCOPE"
     )
+    google_drive_upload_folder_name: str = Field(
+        default="Paper-Review", alias="GOOGLE_DRIVE_UPLOAD_FOLDER_NAME"
+    )
     google_drive_upload_folder_id: str | None = Field(default=None, alias="GOOGLE_DRIVE_UPLOAD_FOLDER_ID")
 
     semantic_scholar_api_key: str | None = Field(default=None, alias="SEMANTIC_SCHOLAR_API_KEY")

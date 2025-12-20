@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import httpx
@@ -12,6 +13,203 @@ from google.oauth2 import service_account
 from paper_review.settings import settings
 
 _DEFAULT_UPLOAD_MIME = "application/pdf"
+_FOLDER_MIME = "application/vnd.google-apps.folder"
+
+_CACHED_UPLOAD_FOLDER_ID: str | None = None
+
+
+def _escape_drive_query_string(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("'", "\\'")
+
+
+def _raise_drive_http_error(r: httpx.Response, *, context: str) -> None:
+    if r.status_code < 400:
+        return
+    body = r.text.strip()
+    message = f"{context} (HTTP {r.status_code})."
+    try:
+        j = r.json()
+    except Exception:  # noqa: BLE001
+        j = None
+    if isinstance(j, dict) and isinstance(j.get("error"), dict):
+        err = j["error"]
+        reason = ""
+        if isinstance(err.get("errors"), list) and err["errors"]:
+            reason = (err["errors"][0] or {}).get("reason") or ""
+        detail = err.get("message") or body
+        message = f"{message} {detail}"
+        if reason in {"accessNotConfigured", "SERVICE_DISABLED"}:
+            message += (
+                " Enable the Google Drive API (drive.googleapis.com) in the Google Cloud project "
+                "that owns your OAuth client, then retry."
+            )
+        if "missing a valid api key" in str(detail).lower():
+            message += (
+                " This usually means the request was unauthenticated; ensure your worker loaded "
+                "GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET/GOOGLE_REFRESH_TOKEN (or a service account) "
+                "and that Drive API is enabled for that project."
+            )
+    elif body:
+        message = f"{message} {body}"
+    raise RuntimeError(message)
+
+
+def ensure_drive_folder(folder_name: str) -> str:
+    """
+    Ensure a Drive folder exists and return its file id.
+
+    By default we prefer a folder in the root (My Drive), but if not found we fall back to any match.
+    """
+    name = (folder_name or "").strip()
+    if not name:
+        raise ValueError("Drive folder name is empty.")
+
+    token = _get_drive_access_token()
+    url = "https://www.googleapis.com/drive/v3/files"
+    headers = {"Authorization": f"Bearer {token}"}
+
+    def _find(*, root_only: bool) -> str | None:
+        q_parts = [
+            f"mimeType='{_FOLDER_MIME}'",
+            f"name='{_escape_drive_query_string(name)}'",
+            "trashed=false",
+        ]
+        if root_only:
+            q_parts.append("'root' in parents")
+        q = " and ".join(q_parts)
+        params = {
+            "q": q,
+            "spaces": "drive",
+            "pageSize": "10",
+            "fields": "files(id,name)",
+            "supportsAllDrives": "true",
+            "includeItemsFromAllDrives": "true",
+        }
+        r = client.get(url, params=params, headers=headers)
+        _raise_drive_http_error(r, context="Drive folder lookup failed")
+        data = r.json() if r.content else {}
+        files = data.get("files") if isinstance(data, dict) else None
+        if not isinstance(files, list) or not files:
+            return None
+        fid = (files[0] or {}).get("id")
+        return fid if isinstance(fid, str) and fid.strip() else None
+
+    with httpx.Client(timeout=120.0) as client:
+        folder_id = _find(root_only=True) or _find(root_only=False)
+        if folder_id:
+            return folder_id
+
+        payload: dict[str, object] = {"name": name, "mimeType": _FOLDER_MIME, "parents": ["root"]}
+        r = client.post(url, params={"supportsAllDrives": "true"}, headers=headers, json=payload)
+        _raise_drive_http_error(r, context="Drive folder create failed")
+        data = r.json() if r.content else {}
+        fid = data.get("id") if isinstance(data, dict) else None
+        if not isinstance(fid, str) or not fid.strip():
+            raise RuntimeError("Drive folder create failed: missing folder id in response.")
+        return fid
+
+
+def resolve_drive_upload_folder_id() -> str | None:
+    """
+    Resolve the Drive folder id used for uploads.
+
+    Priority:
+    1) GOOGLE_DRIVE_UPLOAD_FOLDER_ID (explicit id)
+    2) GOOGLE_DRIVE_UPLOAD_FOLDER_NAME (default: Paper-Review) → find/create
+    """
+    explicit = (settings.google_drive_upload_folder_id or "").strip() or None
+    if explicit:
+        return explicit
+
+    global _CACHED_UPLOAD_FOLDER_ID
+    if _CACHED_UPLOAD_FOLDER_ID:
+        return _CACHED_UPLOAD_FOLDER_ID
+
+    name = (settings.google_drive_upload_folder_name or "").strip()
+    if not name:
+        return None
+
+    folder_id = ensure_drive_folder(name)
+    _CACHED_UPLOAD_FOLDER_ID = folder_id
+    return folder_id
+
+
+def open_drive_file_stream(file_id: str) -> tuple[httpx.Response, Callable[[], None]]:
+    """
+    Open a streaming HTTP response for a Drive file (alt=media).
+
+    Returns: (httpx.Response, close_fn)
+    """
+    token = _get_drive_access_token()
+    url = f"https://www.googleapis.com/drive/v3/files/{file_id}"
+    params = {"alt": "media", "supportsAllDrives": "true"}
+    headers = {"Authorization": f"Bearer {token}"}
+
+    client = httpx.Client(timeout=120.0)
+    try:
+        req = client.build_request("GET", url, params=params, headers=headers)
+        r = client.send(req, stream=True)
+        if r.status_code >= 400:
+            body = ""
+            try:
+                body = r.read().decode("utf-8", errors="replace")
+            except Exception:  # noqa: BLE001
+                body = ""
+            message = f"Drive download failed (HTTP {r.status_code}) for file_id={file_id}."
+            try:
+                j = json.loads(body) if body else None
+            except Exception:  # noqa: BLE001
+                j = None
+            if isinstance(j, dict) and isinstance(j.get("error"), dict):
+                err = j["error"]
+                reason = ""
+                if isinstance(err.get("errors"), list) and err["errors"]:
+                    reason = (err["errors"][0] or {}).get("reason") or ""
+                detail = err.get("message") or body
+                message = f"{message} {detail}"
+                if reason in {"accessNotConfigured", "SERVICE_DISABLED"}:
+                    message += (
+                        " Enable the Google Drive API (drive.googleapis.com) in the Google Cloud project "
+                        "that owns your OAuth client, then retry."
+                    )
+                if "missing a valid api key" in str(detail).lower():
+                    message += (
+                        " This usually means the request was unauthenticated; ensure your worker loaded "
+                        "GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET/GOOGLE_REFRESH_TOKEN (or a service account) "
+                        "and that Drive API is enabled for that project."
+                    )
+            elif body:
+                message = f"{message} {body}"
+            try:
+                r.close()
+            finally:
+                client.close()
+            raise RuntimeError(message)
+
+        def _close() -> None:
+            try:
+                r.close()
+            finally:
+                client.close()
+
+        return r, _close
+    except Exception:
+        client.close()
+        raise
+
+
+def iter_drive_file_bytes(file_id: str):
+    """
+    Stream a Drive file's raw bytes (alt=media).
+
+    Used for proxying downloads without buffering the whole file in memory/disk.
+    """
+    r, close = open_drive_file_stream(file_id)
+    try:
+        for chunk in r.iter_bytes():
+            yield chunk
+    finally:
+        close()
 
 
 def _get_drive_access_token() -> str:

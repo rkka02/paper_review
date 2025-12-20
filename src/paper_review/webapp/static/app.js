@@ -1591,6 +1591,23 @@ function renderPaperControls(paper) {
 
   paperControls.appendChild(statusSelect);
 
+  const hasPdf =
+    paper.drive_file_id &&
+    !paper.drive_file_id.startsWith("doi_only:") &&
+    !paper.drive_file_id.startsWith("import_json:");
+  const pdfBtn = createEl("button", {
+    className: "btn btn-secondary btn-small",
+    text: "PDF 보기/다운로드",
+    attrs: { type: "button" },
+  });
+  pdfBtn.disabled = !hasPdf;
+  pdfBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    if (!hasPdf) return;
+    window.open(`/api/papers/${paper.id}/pdf`, "_blank", "noopener");
+  });
+  paperControls.appendChild(pdfBtn);
+
   /* DOI edit controls disabled for now.
   const doiWrap = createEl("div", { className: "doi-edit" });
   const doiField = createEl("input", {

@@ -14,12 +14,13 @@ from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import delete, desc, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 from starlette.middleware.sessions import SessionMiddleware
-from starlette.responses import HTMLResponse
+from starlette.background import BackgroundTask
+from starlette.responses import FileResponse, HTMLResponse, StreamingResponse
 from starlette.staticfiles import StaticFiles
 
 from paper_review.analysis_output import validate_analysis
 from paper_review.db import db_session, init_db
-from paper_review.drive import upload_drive_file
+from paper_review.drive import open_drive_file_stream, resolve_drive_upload_folder_id, upload_drive_file
 from paper_review.models import (
     AnalysisOutput,
     AnalysisRun,
@@ -927,11 +928,14 @@ async def upload_paper_pdf(
                 filename = f"{safe}.pdf"
 
         try:
+            parent_folder_id = resolve_drive_upload_folder_id()
             drive_file_id = upload_drive_file(
                 final_path,
                 filename=filename,
-                parent_folder_id=settings.google_drive_upload_folder_id,
+                parent_folder_id=parent_folder_id,
             )
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=502, detail=str(e))
         finally:
             try:
                 final_path.unlink(missing_ok=True)
@@ -963,6 +967,52 @@ async def upload_paper_pdf(
         raise
 
     return PaperOut.model_validate(paper, from_attributes=True)
+
+
+@app.get("/api/papers/{paper_id}/pdf", dependencies=[Depends(_require_auth)])
+def download_paper_pdf(paper_id: uuid.UUID, db: Session = Depends(get_db)):
+    paper = db.get(Paper, paper_id)
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+
+    drive_file_id = (paper.drive_file_id or "").strip()
+    if not drive_file_id:
+        raise HTTPException(status_code=404, detail="No PDF for this paper.")
+
+    if drive_file_id.startswith(_DOI_ONLY_PREFIX) or drive_file_id.startswith(_IMPORT_JSON_PREFIX):
+        raise HTTPException(status_code=404, detail="No PDF for this paper.")
+
+    filename = f"{paper_id}.pdf"
+
+    if drive_file_id.startswith(_UPLOAD_PREFIX):
+        path = settings.upload_dir / f"{paper_id}.pdf"
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="PDF not found on server.")
+        return FileResponse(
+            path=path,
+            media_type="application/pdf",
+            filename=filename,
+            content_disposition_type="inline",
+        )
+
+    try:
+        r, close = open_drive_file_stream(drive_file_id)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(e))
+
+    headers = {
+        "Content-Disposition": f'inline; filename="{filename}"',
+    }
+    content_length = r.headers.get("content-length")
+    if content_length:
+        headers["Content-Length"] = content_length
+
+    return StreamingResponse(
+        r.iter_bytes(),
+        media_type="application/pdf",
+        headers=headers,
+        background=BackgroundTask(close),
+    )
 
 
 @app.get("/api/papers/{paper_id}", response_model=PaperDetailOut, dependencies=[Depends(_require_auth)])

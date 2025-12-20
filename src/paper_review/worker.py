@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 _UPLOAD_PREFIX = "upload:"
 _DOI_ONLY_PREFIX = "doi_only:"
+_IMPORT_JSON_PREFIX = "import_json:"
 
 
 @dataclass(frozen=True)
@@ -188,7 +189,7 @@ def _process_job(job: Job) -> None:
     t0 = time.perf_counter()
 
     has_pdf = True
-    if job.drive_file_id.startswith(_DOI_ONLY_PREFIX):
+    if job.drive_file_id.startswith(_DOI_ONLY_PREFIX) or job.drive_file_id.startswith(_IMPORT_JSON_PREFIX):
         has_pdf = False
 
     if job.pdf_size_bytes and job.pdf_size_bytes > settings.max_pdf_mb * 1024 * 1024:
