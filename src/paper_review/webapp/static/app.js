@@ -24,6 +24,7 @@ const createStatus = $("createStatus");
 
 const refreshBtn = $("refreshBtn");
 const newFolderBtn = $("newFolderBtn");
+const newPaperBtn = $("newPaperBtn");
 const paperSearch = $("paperSearch");
 const paperStatusAll = $("paperStatusAll");
 const paperStatusUnread = $("paperStatusUnread");
@@ -37,6 +38,7 @@ const papersList = $("papersList");
 
 const analyzeBtn = $("analyzeBtn");
 const stopPollBtn = $("stopPollBtn");
+const detailTitle = $("detailTitle");
 const detailMeta = $("detailMeta");
 const paperControls = $("paperControls");
 const detailError = $("detailError");
@@ -57,6 +59,10 @@ const jsonLangKorean = $("jsonLangKorean");
 const jsonSaveBtn = $("jsonSaveBtn");
 const jsonLogsPanel = $("jsonLogsPanel");
 const jsonLogs = $("jsonLogs");
+const detailTabsMoreBtn = $("detailTabsMoreBtn");
+const newPaperDrawer = $("newPaperDrawer");
+const newPaperDrawerPanel = $("newPaperDrawerPanel");
+const newPaperCloseBtn = $("newPaperCloseBtn");
 
 const graphBtn = $("graphBtn");
 const graphOverlay = $("graphOverlay");
@@ -116,6 +122,7 @@ let latestRecs = null;
 let latestRecsTask = null;
 let recsTaskPollHandle = null;
 let recsLogsVisible = false;
+let newPaperDrawerHideTimer = null;
 
 function show(el) {
   el.classList.remove("hidden");
@@ -127,6 +134,48 @@ function hide(el) {
 
 function setText(el, text) {
   el.textContent = text ?? "";
+}
+
+const DRAWER_ANIM_MS = 220;
+
+function isNewPaperDrawerOpen() {
+  return newPaperDrawer && !newPaperDrawer.classList.contains("hidden");
+}
+
+function openNewPaperDrawer() {
+  if (!newPaperDrawer) return;
+  if (newPaperDrawerHideTimer) {
+    window.clearTimeout(newPaperDrawerHideTimer);
+    newPaperDrawerHideTimer = null;
+  }
+  show(newPaperDrawer);
+  document.body.classList.add("drawer-open");
+  newPaperDrawer.classList.remove("open");
+  requestAnimationFrame(() => newPaperDrawer.classList.add("open"));
+  window.addEventListener("keydown", onNewPaperDrawerKeydown, true);
+  window.setTimeout(() => {
+    if (analysisJsonFileInput) analysisJsonFileInput.focus();
+  }, 0);
+}
+
+function closeNewPaperDrawer() {
+  if (!newPaperDrawer) return;
+  if (!isNewPaperDrawerOpen()) return;
+  newPaperDrawer.classList.remove("open");
+  window.removeEventListener("keydown", onNewPaperDrawerKeydown, true);
+  document.body.classList.remove("drawer-open");
+  if (newPaperDrawerHideTimer) window.clearTimeout(newPaperDrawerHideTimer);
+  newPaperDrawerHideTimer = window.setTimeout(() => {
+    hide(newPaperDrawer);
+    newPaperDrawerHideTimer = null;
+  }, DRAWER_ANIM_MS);
+}
+
+function onNewPaperDrawerKeydown(e) {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    closeNewPaperDrawer();
+  }
 }
 
 async function copyToClipboard(text) {
@@ -704,8 +753,24 @@ function renderAuthors(authors) {
   const wrap = createEl("div", { className: "author-list" });
   for (const it of items) {
     const line = createEl("div", { className: "author-line" });
-    line.appendChild(createEl("span", { className: "author-name", text: it.name }));
-    if (it.affiliation) line.appendChild(createEl("span", { className: "author-aff", text: it.affiliation }));
+    if (it.affiliation) {
+      const btn = createEl("button", {
+        className: "author-name author-name-btn",
+        text: it.name,
+        attrs: { type: "button", "aria-expanded": "false" },
+      });
+      const aff = createEl("div", { className: "author-aff hidden", text: it.affiliation });
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        const next = aff.classList.contains("hidden");
+        aff.classList.toggle("hidden", !next);
+        btn.setAttribute("aria-expanded", next ? "true" : "false");
+      });
+      line.appendChild(btn);
+      line.appendChild(aff);
+    } else {
+      line.appendChild(createEl("span", { className: "author-name", text: it.name }));
+    }
     wrap.appendChild(line);
   }
   return wrap;
@@ -728,13 +793,41 @@ function switchDetailTab(tab) {
   }
   const tabs = document.querySelectorAll("#detailTabs .tab");
   for (const t of tabs) t.classList.toggle("active", t.getAttribute("data-tab") === tab);
+  if (detailTabsMoreBtn) {
+    detailTabsMoreBtn.classList.toggle("active", ["diagnostics", "md", "json"].includes(tab));
+  }
+
+  const showJsonActions = tab === "json";
+  if (jsonSaveBtn) jsonSaveBtn.classList.toggle("hidden", !showJsonActions);
+  if (jsonCopyBtn) jsonCopyBtn.classList.toggle("hidden", !showJsonActions);
 }
 
 function initDetailTabs() {
   const tabs = document.querySelectorAll("#detailTabs .tab");
   for (const t of tabs) {
+    const key = t.getAttribute("data-tab");
+    if (!key) continue;
     t.addEventListener("click", () => {
-      switchDetailTab(t.getAttribute("data-tab"));
+      switchDetailTab(key);
+    });
+  }
+
+  if (detailTabsMoreBtn) {
+    detailTabsMoreBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      const extras = [
+        { key: "json", label: "JSON" },
+        { key: "md", label: "Markdown" },
+        { key: "diagnostics", label: "Diagnostics" },
+      ];
+      toggleMenu(
+        detailTabsMoreBtn,
+        "detailTabs:more",
+        extras.map((it) => ({
+          label: `${selectedDetailTab === it.key ? "✓ " : ""}${it.label}`,
+          onClick: () => switchDetailTab(it.key),
+        })),
+      );
     });
   }
   switchDetailTab(selectedDetailTab);
@@ -1550,23 +1643,6 @@ function renderPaperControls(paper) {
   paperControls.replaceChildren();
   if (!paper) return;
 
-  const folderSelect = createEl("select", { className: "select", attrs: { "aria-label": "Folder" } });
-  folderSelect.appendChild(createEl("option", { text: "Unfiled", attrs: { value: "" } }));
-  for (const { folder, depth } of folderTreeRows()) {
-    const indent = depth ? `${"  ".repeat(depth)}` : "";
-    folderSelect.appendChild(
-      createEl("option", { text: `${indent}${folder.name}`, attrs: { value: folder.id } }),
-    );
-  }
-  folderSelect.value = paper.folder_id || "";
-  folderSelect.addEventListener("change", async (e) => {
-    e.preventDefault();
-    const next = folderSelect.value || null;
-    await setPaperFolder(paper.id, next);
-  });
-
-  paperControls.appendChild(folderSelect);
-
   const statusSelect = createEl("select", { className: "select", attrs: { "aria-label": "읽기 상태" } });
   statusSelect.appendChild(createEl("option", { text: "아직 안 읽음", attrs: { value: "to_read" } }));
   statusSelect.appendChild(createEl("option", { text: "읽음", attrs: { value: "done" } }));
@@ -1596,14 +1672,14 @@ function renderPaperControls(paper) {
     !paper.drive_file_id.startsWith("doi_only:") &&
     !paper.drive_file_id.startsWith("import_json:");
 
+  const pdfBtn = createEl("button", {
+    className: "btn btn-secondary btn-small",
+    text: "PDF ▾",
+    attrs: { type: "button" },
+  });
   const pdfUploadInput = createEl("input", {
     className: "hidden",
     attrs: { type: "file", accept: "application/pdf" },
-  });
-  const pdfUploadBtn = createEl("button", {
-    className: "btn btn-secondary btn-small",
-    text: "PDF 업로드",
-    attrs: { type: "button" },
   });
 
   const uploadPdf = async (file) => {
@@ -1612,9 +1688,9 @@ function renderPaperControls(paper) {
       const ok = confirm("기존 PDF를 삭제하고 새 PDF로 교체할까요?");
       if (!ok) return;
     }
-    pdfUploadBtn.disabled = true;
-    const prevText = pdfUploadBtn.textContent;
-    pdfUploadBtn.textContent = "업로드중...";
+    pdfBtn.disabled = true;
+    const prevText = pdfBtn.textContent;
+    pdfBtn.textContent = "업로드중...";
     try {
       await api(`/api/papers/${paper.id}/pdf`, {
         method: "POST",
@@ -1627,36 +1703,68 @@ function renderPaperControls(paper) {
     } catch (err) {
       toast(String(err?.message || err), "error", 6500);
     } finally {
-      pdfUploadBtn.disabled = false;
-      pdfUploadBtn.textContent = prevText;
+      pdfBtn.disabled = false;
+      pdfBtn.textContent = prevText;
       pdfUploadInput.value = "";
     }
   };
 
-  pdfUploadBtn.addEventListener("click", (e) => {
-    e.preventDefault();
-    pdfUploadInput.click();
-  });
   pdfUploadInput.addEventListener("change", async (e) => {
     e.preventDefault();
     const file = pdfUploadInput.files && pdfUploadInput.files[0] ? pdfUploadInput.files[0] : null;
     await uploadPdf(file);
   });
 
-  paperControls.appendChild(pdfUploadBtn);
-  paperControls.appendChild(pdfUploadInput);
-  const pdfBtn = createEl("button", {
-    className: "btn btn-secondary btn-small",
-    text: "PDF 보기/다운로드",
-    attrs: { type: "button" },
-  });
-  pdfBtn.disabled = !hasPdf;
   pdfBtn.addEventListener("click", (e) => {
     e.preventDefault();
-    if (!hasPdf) return;
-    window.open(`/api/papers/${paper.id}/pdf`, "_blank", "noopener");
+    toggleMenu(pdfBtn, `detail:pdf:${paper.id}`, [
+      {
+        label: hasPdf ? "보기/다운로드" : "보기/다운로드 (없음)",
+        onClick: async () => {
+          if (!hasPdf) {
+            toast("PDF 없음", "info");
+            return;
+          }
+          window.open(`/api/papers/${paper.id}/pdf`, "_blank", "noopener");
+        },
+      },
+      {
+        label: hasPdf ? "교체 업로드..." : "업로드...",
+        onClick: async () => {
+          pdfUploadInput.click();
+        },
+      },
+    ]);
   });
+
+  const moreBtn = createEl("button", {
+    className: "btn btn-secondary btn-small",
+    text: "More ▾",
+    attrs: { type: "button" },
+  });
+  moreBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    const langLabel = currentJsonLangKey() === "ko" ? "한국어" : "원문";
+    toggleMenu(moreBtn, `detail:more:${paper.id}`, [
+      { label: "폴더 이동...", onClick: () => movePaperPrompt(paper) },
+      { label: "제목 변경...", onClick: () => renamePaper(paper) },
+      { type: "sep" },
+      { label: `JSON 저장 (${langLabel})`, onClick: () => saveCurrentJson() },
+      {
+        label: `JSON Copy (${langLabel})`,
+        onClick: async () => {
+          await copyToClipboard(jsonEditor ? jsonEditor.value : "");
+          toast("Copied.", "success");
+        },
+      },
+      { type: "sep" },
+      { label: "삭제...", danger: true, onClick: () => deletePaper(paper) },
+    ]);
+  });
+
   paperControls.appendChild(pdfBtn);
+  paperControls.appendChild(moreBtn);
+  paperControls.appendChild(pdfUploadInput);
 
   /* DOI edit controls disabled for now.
   const doiWrap = createEl("div", { className: "doi-edit" });
@@ -3135,9 +3243,17 @@ function applyDetailPayload(d, paperId) {
   if (jsonDraftPaperId !== paperId) resetJsonDrafts(paperId);
   const run = d.latest_run;
   const runStatus = run?.status || "-";
-  const title = d.paper?.title || d.paper?.doi || "";
-  const head = title ? `${title}  •  ` : "";
-  setText(detailMeta, `${head}paper_id=${paperId}  •  run=${runStatus}`);
+
+  const paper = d.paper;
+  const title = (paper?.title || "").trim() || (paper?.doi || "").trim() || "Details";
+  setText(detailTitle, title);
+
+  const metaParts = [];
+  if (paper?.doi && paper?.title) metaParts.push(`doi: ${paper.doi}`);
+  const folder = folderName(paper?.folder_id);
+  metaParts.push(folder ? `folder: ${folder}` : "unfiled");
+  setText(detailMeta, metaParts.join(" • "));
+
   renderPaperControls(d.paper);
   setText(detailError, run?.error || "");
 
@@ -3165,6 +3281,7 @@ async function loadDetails(paperId) {
   if (!paperId) {
     currentDetail = null;
     resetJsonDrafts(null);
+    setText(detailTitle, "Details");
     setText(detailMeta, "");
     if (paperControls) paperControls.replaceChildren();
     if (analyzeBtn) analyzeBtn.textContent = "Analyze";
@@ -3353,6 +3470,7 @@ async function createPaper() {
     if (analysisJsonText) analysisJsonText.value = "";
     setText(createStatus, "OK");
     toast("Created.", "success");
+    closeNewPaperDrawer();
     await refreshPapers();
     await loadDetails(selectedPaperId);
   } catch (e) {
@@ -3410,6 +3528,14 @@ async function main() {
     analysisJsonClearBtn.addEventListener("click", () => {
       if (analysisJsonText) analysisJsonText.value = "";
       toast("Cleared.", "info");
+    });
+  }
+
+  if (newPaperBtn) newPaperBtn.addEventListener("click", openNewPaperDrawer);
+  if (newPaperCloseBtn) newPaperCloseBtn.addEventListener("click", closeNewPaperDrawer);
+  if (newPaperDrawer) {
+    newPaperDrawer.addEventListener("click", (e) => {
+      if (e.target === newPaperDrawer) closeNewPaperDrawer();
     });
   }
 

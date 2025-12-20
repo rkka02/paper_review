@@ -41,81 +41,14 @@
         </div>
       </section>
 
-      <section id="appSection" class="hidden">
-        <section class="layout">
+        <section id="appSection" class="hidden">
+          <section class="layout">
           <aside class="sidebar">
-            <section class="card">
-              <div class="row space-between">
-                <h2 class="h2">New paper</h2>
-                <span class="pill pill-muted">Choose one source</span>
-              </div>
-
-              <!--
-              <label class="field">
-                <span class="label">PDF upload</span>
-                <input id="pdfFile" type="file" accept="application/pdf" />
-                <span class="hint">로컬 PDF를 바로 업로드해서 테스트할 수 있어요.</span>
-              </label>
-              -->
-
-              <!--
-              <label class="field">
-                <span class="label">Google Drive file id</span>
-                <input id="driveFileId" type="text" placeholder="1ALi..." />
-                <span class="hint">Drive에 이미 있는 PDF면 file id만 넣어도 됩니다.</span>
-              </label>
-              -->
-
-              <!--
-              <div class="grid-2">
-                <label class="field">
-                  <span class="label">DOI</span>
-                  <input id="doi" type="text" placeholder="10.1145/..." />
-                </label>
-
-                <label class="field">
-                  <span class="label">Title (optional)</span>
-                  <input id="title" type="text" placeholder="paper title..." />
-                </label>
-              </div>
-              -->
-
-              <label class="field">
-                <span class="label">Analysis JSON upload</span>
-                <input id="analysisJsonFile" type="file" accept="application/json,.json" />
-                <span class="hint">
-                  ChatGPT 웹에서 받은 분석 JSON을 업로드하면, API analyze 없이 바로 결과를 등록해요.
-                </span>
-              </label>
-
-              <details id="analysisJsonPaste" class="accordion">
-                <summary>Paste analysis JSON</summary>
-                <textarea
-                  id="analysisJsonText"
-                  class="textarea"
-                  rows="8"
-                  spellcheck="false"
-                  placeholder='{"paper": {...}, "normalized": {...}, "personas": [...], ...}'
-                ></textarea>
-                <div class="row">
-                  <button id="analysisJsonClearBtn" class="btn btn-secondary btn-small" type="button">
-                    Clear
-                  </button>
-                </div>
-              </details>
-
-              <div class="row">
-                <button id="createBtn" class="btn btn-primary" type="button">Create</button>
-                <!-- <button id="analyzeBtn" class="btn btn-secondary" type="button" disabled>Analyze</button> -->
-                <span id="createStatus" class="muted"></span>
-              </div>
-              <p class="muted small">최소 하나는 필요: Analysis JSON</p>
-            </section>
-
             <section class="card">
               <div class="row space-between">
                 <h2 class="h2">Library</h2>
                 <div class="row">
+                  <button id="newPaperBtn" class="btn btn-primary btn-small" type="button">New paper</button>
                   <button id="newFolderBtn" class="btn btn-secondary btn-small" type="button">
                     New folder
                   </button>
@@ -149,7 +82,7 @@
           <section class="content">
             <section class="card details">
               <div class="row space-between">
-                <h2 class="h2">Details</h2>
+                <h2 id="detailTitle" class="h2">Details</h2>
                 <div class="row">
                   <button id="stopPollBtn" class="btn btn-secondary hidden" type="button">
                     Stop polling
@@ -165,8 +98,8 @@
                     <button id="jsonLangOriginal" class="tab active" type="button">원문</button>
                     <button id="jsonLangKorean" class="tab" type="button">한국어</button>
                   </div>
-                  <button id="jsonSaveBtn" class="btn btn-primary btn-small" type="button">저장</button>
-                  <button id="jsonCopyBtn" class="btn btn-secondary btn-small" type="button">Copy</button>
+                  <button id="jsonSaveBtn" class="btn btn-primary btn-small hidden" type="button">저장</button>
+                  <button id="jsonCopyBtn" class="btn btn-secondary btn-small hidden" type="button">Copy</button>
                 </div>
               </div>
               <div id="detailError" class="error"></div>
@@ -175,9 +108,7 @@
                 <button class="tab active" type="button" data-tab="overview">Overview</button>
                 <button class="tab" type="button" data-tab="personas">Personas</button>
                 <button class="tab" type="button" data-tab="normalized">Normalized</button>
-                <button class="tab" type="button" data-tab="diagnostics">Diagnostics</button>
-                <button class="tab" type="button" data-tab="md">Markdown</button>
-                <button class="tab" type="button" data-tab="json">JSON</button>
+                <button id="detailTabsMoreBtn" class="tab tab-more" type="button">More ▾</button>
               </div>
               <div id="overviewView" class="panel"></div>
 
@@ -211,6 +142,78 @@
         </section>
       </section>
     </main>
+
+    <section id="newPaperDrawer" class="drawer-overlay hidden" aria-hidden="true">
+      <div id="newPaperDrawerPanel" class="drawer-panel" role="dialog" aria-modal="true" aria-label="New paper">
+        <section class="card drawer-card">
+          <div class="row space-between">
+            <h2 class="h2">New paper</h2>
+            <button id="newPaperCloseBtn" class="btn btn-secondary btn-small" type="button">Close</button>
+          </div>
+          <div class="muted small">Choose one source</div>
+
+          <!--
+          <label class="field">
+            <span class="label">PDF upload</span>
+            <input id="pdfFile" type="file" accept="application/pdf" />
+            <span class="hint">로컬 PDF를 바로 업로드해서 테스트할 수 있어요.</span>
+          </label>
+          -->
+
+          <!--
+          <label class="field">
+            <span class="label">Google Drive file id</span>
+            <input id="driveFileId" type="text" placeholder="1ALi..." />
+            <span class="hint">Drive에 이미 있는 PDF면 file id만 넣어도 됩니다.</span>
+          </label>
+          -->
+
+          <!--
+          <div class="grid-2">
+            <label class="field">
+              <span class="label">DOI</span>
+              <input id="doi" type="text" placeholder="10.1145/..." />
+            </label>
+
+            <label class="field">
+              <span class="label">Title (optional)</span>
+              <input id="title" type="text" placeholder="paper title..." />
+            </label>
+          </div>
+          -->
+
+          <label class="field">
+            <span class="label">Analysis JSON upload</span>
+            <input id="analysisJsonFile" type="file" accept="application/json,.json" />
+            <span class="hint">
+              ChatGPT 웹에서 받은 분석 JSON을 업로드하면, API analyze 없이 바로 결과를 등록해요.
+            </span>
+          </label>
+
+          <details id="analysisJsonPaste" class="accordion">
+            <summary>Paste analysis JSON</summary>
+            <textarea
+              id="analysisJsonText"
+              class="textarea"
+              rows="8"
+              spellcheck="false"
+              placeholder='{"paper": {...}, "normalized": {...}, "personas": [...], ...}'
+            ></textarea>
+            <div class="row">
+              <button id="analysisJsonClearBtn" class="btn btn-secondary btn-small" type="button">
+                Clear
+              </button>
+            </div>
+          </details>
+
+          <div class="row">
+            <button id="createBtn" class="btn btn-primary" type="button">Create</button>
+            <span id="createStatus" class="muted"></span>
+          </div>
+          <p class="muted small">최소 하나는 필요: Analysis JSON</p>
+        </section>
+      </div>
+    </section>
 
     <section id="graphOverlay" class="graph-overlay hidden" aria-hidden="true">
       <div class="graph-toolbar">
