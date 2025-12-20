@@ -798,6 +798,12 @@ html[data-theme="dark"] .tab.active {
   margin-top: 6px;
 }
 
+#detailTabs {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  margin-top: 12px;
+}
+
 .detail-toolbar {
   gap: 8px;
 }

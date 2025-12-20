@@ -9,7 +9,7 @@ class Evidence(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     page: int = Field(ge=1)
-    quote: str = Field(min_length=1, max_length=200)
+    quote: str = Field(min_length=1)
     why: str = Field(min_length=1)
 
 
@@ -160,7 +160,7 @@ EVIDENCE_JSON_SCHEMA: dict = {
     "required": ["page", "quote", "why"],
     "properties": {
         "page": {"type": "integer"},
-        "quote": {"type": "string", "maxLength": 200},
+        "quote": {"type": "string"},
         "why": {"type": "string"},
     },
 }
