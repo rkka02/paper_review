@@ -74,6 +74,9 @@ class Settings(BaseSettings):
         default="Paper-Review", alias="GOOGLE_DRIVE_UPLOAD_FOLDER_NAME"
     )
     google_drive_upload_folder_id: str | None = Field(default=None, alias="GOOGLE_DRIVE_UPLOAD_FOLDER_ID")
+    google_drive_paper_review_folder_id: str | None = Field(
+        default=None, alias="GOOGLE_DRIVE_PAPER_REVIEW_FOLDER_ID"
+    )
 
     semantic_scholar_api_key: str | None = Field(default=None, alias="SEMANTIC_SCHOLAR_API_KEY")
 

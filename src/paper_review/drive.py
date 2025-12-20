@@ -115,11 +115,16 @@ def resolve_drive_upload_folder_id() -> str | None:
 
     Priority:
     1) GOOGLE_DRIVE_UPLOAD_FOLDER_ID (explicit id)
-    2) GOOGLE_DRIVE_UPLOAD_FOLDER_NAME (default: Paper-Review) → find/create
+    2) GOOGLE_DRIVE_PAPER_REVIEW_FOLDER_ID (legacy explicit id)
+    3) GOOGLE_DRIVE_UPLOAD_FOLDER_NAME (default: Paper-Review) → find/create
     """
     explicit = (settings.google_drive_upload_folder_id or "").strip() or None
     if explicit:
         return explicit
+
+    legacy = (settings.google_drive_paper_review_folder_id or "").strip() or None
+    if legacy:
+        return legacy
 
     global _CACHED_UPLOAD_FOLDER_ID
     if _CACHED_UPLOAD_FOLDER_ID:
