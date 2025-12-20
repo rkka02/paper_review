@@ -134,6 +134,19 @@ def resolve_drive_upload_folder_id() -> str | None:
     return folder_id
 
 
+def delete_drive_file(file_id: str) -> None:
+    token = _get_drive_access_token()
+    url = f"https://www.googleapis.com/drive/v3/files/{file_id}"
+    params = {"supportsAllDrives": "true"}
+    headers = {"Authorization": f"Bearer {token}"}
+
+    with httpx.Client(timeout=120.0) as client:
+        r = client.delete(url, params=params, headers=headers)
+        if r.status_code in {204, 404}:
+            return
+        _raise_drive_http_error(r, context=f"Drive delete failed for file_id={file_id}")
+
+
 def open_drive_file_stream(file_id: str) -> tuple[httpx.Response, Callable[[], None]]:
     """
     Open a streaming HTTP response for a Drive file (alt=media).

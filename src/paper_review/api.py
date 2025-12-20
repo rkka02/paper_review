@@ -20,7 +20,12 @@ from starlette.staticfiles import StaticFiles
 
 from paper_review.analysis_output import validate_analysis
 from paper_review.db import db_session, init_db
-from paper_review.drive import open_drive_file_stream, resolve_drive_upload_folder_id, upload_drive_file
+from paper_review.drive import (
+    delete_drive_file,
+    open_drive_file_stream,
+    resolve_drive_upload_folder_id,
+    upload_drive_file,
+)
 from paper_review.models import (
     AnalysisOutput,
     AnalysisRun,
@@ -965,6 +970,101 @@ async def upload_paper_pdf(
         except Exception:  # noqa: BLE001
             pass
         raise
+
+    return PaperOut.model_validate(paper, from_attributes=True)
+
+
+@app.post("/api/papers/{paper_id}/pdf", response_model=PaperOut, dependencies=[Depends(_require_auth)])
+async def replace_paper_pdf(
+    paper_id: uuid.UUID, request: Request, db: Session = Depends(get_db)
+) -> PaperOut:
+    paper = db.get(Paper, paper_id)
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+
+    content_type = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
+    if content_type not in {"application/pdf", "application/octet-stream"}:
+        raise HTTPException(status_code=415, detail="Upload must be application/pdf.")
+
+    max_bytes = int(settings.max_pdf_mb) * 1024 * 1024
+    upload_dir = settings.upload_dir
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    tmp_path = upload_dir / f"{paper_id}.{uuid.uuid4().hex}.pdf.part"
+
+    hasher = hashlib.sha256()
+    size = 0
+    try:
+        with tmp_path.open("wb") as f:
+            async for chunk in request.stream():
+                if not chunk:
+                    continue
+                size += len(chunk)
+                if size > max_bytes:
+                    raise HTTPException(
+                        status_code=413, detail=f"PDF too large (>{settings.max_pdf_mb} MB)."
+                    )
+                hasher.update(chunk)
+                f.write(chunk)
+    except Exception:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except Exception:  # noqa: BLE001
+            pass
+        raise
+
+    old_drive_file_id = paper.drive_file_id
+    backend = settings.upload_backend.strip().lower()
+
+    try:
+        if backend == "drive":
+            filename = f"{paper_id}.pdf"
+            label = (paper.title or "").strip() or (paper.doi or "").strip() or ""
+            if label:
+                safe = "".join([c if c.isalnum() or c in {" ", "_", "-"} else "_" for c in label]).strip()
+                if safe:
+                    filename = f"{safe}.pdf"
+
+            parent_folder_id = resolve_drive_upload_folder_id()
+            try:
+                drive_file_id = upload_drive_file(
+                    tmp_path,
+                    filename=filename,
+                    parent_folder_id=parent_folder_id,
+                )
+            except Exception as e:  # noqa: BLE001
+                raise HTTPException(status_code=502, detail=str(e))
+            paper.drive_file_id = drive_file_id
+        else:
+            final_path = upload_dir / f"{paper_id}.pdf"
+            tmp_path.replace(final_path)
+            paper.drive_file_id = f"{_UPLOAD_PREFIX}{paper_id}"
+    finally:
+        if backend == "drive":
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except Exception:  # noqa: BLE001
+                pass
+
+    paper.pdf_sha256 = hasher.hexdigest()
+    paper.pdf_size_bytes = size
+
+    db.add(paper)
+    db.flush()
+    db.refresh(paper)
+
+    # Best-effort cleanup of the previous PDF (if any).
+    try:
+        if old_drive_file_id.startswith(_UPLOAD_PREFIX) and backend == "drive":
+            (settings.upload_dir / f"{paper_id}.pdf").unlink(missing_ok=True)
+            (settings.upload_dir / f"{paper_id}.pdf.part").unlink(missing_ok=True)
+        elif not (
+            old_drive_file_id.startswith(_UPLOAD_PREFIX)
+            or old_drive_file_id.startswith(_DOI_ONLY_PREFIX)
+            or old_drive_file_id.startswith(_IMPORT_JSON_PREFIX)
+        ) and old_drive_file_id != paper.drive_file_id:
+            delete_drive_file(old_drive_file_id)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("pdf_replace_cleanup_failed paper_id=%s error=%s", paper_id, e)
 
     return PaperOut.model_validate(paper, from_attributes=True)
 

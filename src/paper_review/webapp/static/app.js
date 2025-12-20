@@ -1595,6 +1595,56 @@ function renderPaperControls(paper) {
     paper.drive_file_id &&
     !paper.drive_file_id.startsWith("doi_only:") &&
     !paper.drive_file_id.startsWith("import_json:");
+
+  const pdfUploadInput = createEl("input", {
+    className: "hidden",
+    attrs: { type: "file", accept: "application/pdf" },
+  });
+  const pdfUploadBtn = createEl("button", {
+    className: "btn btn-secondary btn-small",
+    text: "PDF 업로드",
+    attrs: { type: "button" },
+  });
+
+  const uploadPdf = async (file) => {
+    if (!file) return;
+    if (hasPdf) {
+      const ok = confirm("기존 PDF를 삭제하고 새 PDF로 교체할까요?");
+      if (!ok) return;
+    }
+    pdfUploadBtn.disabled = true;
+    const prevText = pdfUploadBtn.textContent;
+    pdfUploadBtn.textContent = "업로드중...";
+    try {
+      await api(`/api/papers/${paper.id}/pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/pdf" },
+        body: file,
+      });
+      toast("PDF 업로드됨.", "success");
+      await refreshPapers();
+      if (selectedPaperId === paper.id) await loadDetails(selectedPaperId);
+    } catch (err) {
+      toast(String(err?.message || err), "error", 6500);
+    } finally {
+      pdfUploadBtn.disabled = false;
+      pdfUploadBtn.textContent = prevText;
+      pdfUploadInput.value = "";
+    }
+  };
+
+  pdfUploadBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    pdfUploadInput.click();
+  });
+  pdfUploadInput.addEventListener("change", async (e) => {
+    e.preventDefault();
+    const file = pdfUploadInput.files && pdfUploadInput.files[0] ? pdfUploadInput.files[0] : null;
+    await uploadPdf(file);
+  });
+
+  paperControls.appendChild(pdfUploadBtn);
+  paperControls.appendChild(pdfUploadInput);
   const pdfBtn = createEl("button", {
     className: "btn btn-secondary btn-small",
     text: "PDF 보기/다운로드",
